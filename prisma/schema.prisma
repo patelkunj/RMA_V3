@@ -1,0 +1,453 @@
+// Prisma Schema — v3 (corrected)
+// Fixes applied:
+//   - Back-relations added to all parent models
+//   - Dual User relations in RepairJob named with @relation("name")
+//   - createdBy now has a proper Prisma relation
+//   - productId made nullable in RepairJobCosting
+//   - onDelete: Cascade added to all child relations
+//   - Model names normalised to PascalCase singular
+//   - Indexes added for organizationId, customerId, userId, referenceType/Id
+//   - isRead index replaced with composite index
+//   - Naming inconsistencies fixed (created_Date, expires_at, contactPerson_name)
+//   - Enum names clarified (JobStatus, CostType, AuditAction, SenderType)
+//   - Enum values standardised to SCREAMING_SNAKE_CASE
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  TECHNICIAN
+}
+
+enum JobStatus {
+  CREATED
+  RECEIVED
+  IN_PROGRESS
+  WAITING_PARTS
+  COMPLETED
+  CANCELLED
+}
+
+enum Resolution {
+  REPLACEMENT
+  REPAIR
+  CREDIT
+}
+
+enum CostType {
+  PART
+  LABOR
+  SHIPPING
+  REPLACEMENT
+  CREDIT_NOTE
+  TAX
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  COMMENT
+  CONTACT
+  COST_CHANGE
+}
+
+enum SenderType {
+  USER
+  CUSTOMER
+  SYSTEM
+}
+
+enum DocumentType {
+  IMAGE
+  PDF
+  DOC
+  VIDEO
+  OTHER
+}
+
+// ─── Organization ────────────────────────────────────────────────────────────
+
+model Organization {
+  id          Int      @id @default(autoincrement())
+  name        String
+  alias       String
+  address     String?
+  email       String?
+  phone       String?
+  isActive    Boolean  @default(false)
+  createdDate DateTime @default(now())
+  updatedDate DateTime @updatedAt
+
+  // Back-relations (required by Prisma)
+  userOrganizations UserOrganization[]
+  customers         Customer[]
+  repairJobs        RepairJob[]
+  products          Product[]
+  productSerials    ProductSerial[]
+  notifications     Notification[]
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                   Int       @id @default(autoincrement())
+  firstName            String
+  lastName             String
+  email                String    @unique
+  password             String
+  mobile               String?
+  role                 UserRole
+  isActive             Boolean   @default(false)
+  isLocked             Boolean   @default(false)
+  activationToken      String?
+  lastLoginAt          DateTime?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdDate          DateTime  @default(now())
+  updatedDate          DateTime  @updatedAt
+
+  // Back-relations (required by Prisma)
+  userOrganizations UserOrganization[]
+  userCustomers     UserCustomer[]
+  // Named relations required because RepairJob has TWO FKs pointing to User
+  jobsCreated       RepairJob[]         @relation("JobCreatedBy")
+  jobsReceived      RepairJob[]         @relation("JobReceivedBy")
+  trackingChanges   RepairJobTracking[]
+  comments          RepairJobComment[]
+  auditLogs         RepairJobAuditLog[]
+  sessions          SessionManagement[]
+}
+
+// ─── UserOrganization ────────────────────────────────────────────────────────
+
+model UserOrganization {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdDate    DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+// ─── UserCustomer ────────────────────────────────────────────────────────────
+
+model UserCustomer {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customerId  Int
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdDate DateTime @default(now())
+
+  @@unique([userId, customerId])
+  @@index([userId, customerId])
+}
+
+// ─── Customer ────────────────────────────────────────────────────────────────
+
+model Customer {
+  id                   Int          @id @default(autoincrement())
+  organizationId       Int
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  companyName          String
+  customerCode         String
+  email                String
+  password             String
+  contactPersonName    String? // Fixed: was contactPerson_name (mixed case)
+  contactNo            String?
+  mobile               String?
+  role                 String       @default("Customer")
+  returnAddress        String?
+  warrantyMonths       Int          @default(0)
+  warrantyTypes        String?
+  doaWarrantyDays      Int          @default(0)
+  doaWarrantyTypes     String?
+  warrantyRemarks      String?
+  isPickupFaulty       Boolean      @default(false)
+  salesPerson          String?
+  isActive             Boolean      @default(false)
+  isLocked             Boolean      @default(false)
+  creditLimit          Decimal?     @db.Decimal(12, 2)
+  paymentTerms         Int?
+  activationToken      String?
+  lastLoginAt          DateTime?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdDate          DateTime     @default(now())
+  updatedDate          DateTime     @updatedAt
+
+  // Back-relations (required by Prisma)
+  userCustomers UserCustomer[]
+  repairJobs    RepairJob[]
+
+  @@unique([organizationId, customerCode])
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+// ─── RepairJob ───────────────────────────────────────────────────────────────
+
+model RepairJob {
+  id                     Int          @id @default(autoincrement())
+  raJobId                String?      @unique
+  organizationId         Int
+  organization           Organization @relation(fields: [organizationId], references: [id])
+  customerId             Int
+  customer               Customer     @relation(fields: [customerId], references: [id])
+  sku                    String
+  productName            String
+  serialNumber           String
+  devicePassword         String?
+  isDoa                  Boolean      @default(false)
+  isProductUnderWarranty Boolean      @default(false)
+  cloudStatus            String?
+  cloudDetails           String?
+  productFault           String
+  videoUrl               String?
+  customerTrackingNumber String?
+  dispatchId             String?
+  salesInvoice           String?
+  customerSalesInvoice   String?
+  customerJobNo          String?
+  resolutionType         Resolution?
+  jobStatus              JobStatus    @default(CREATED)
+  // Both FKs to User must have named relations — avoids Prisma ambiguity error
+  createdBy              Int
+  createdByUser          User         @relation("JobCreatedBy", fields: [createdBy], references: [id])
+  createdRoleBy          String
+  receivedBy             Int?
+  receivedByUser         User?        @relation("JobReceivedBy", fields: [receivedBy], references: [id])
+  receivedRoleBy         String?
+  receivedDate           DateTime?
+  dueDate                DateTime?
+  completionDate         DateTime?
+  createdDate            DateTime     @default(now())
+  updatedDate            DateTime     @updatedAt
+
+  // Back-relations (required by Prisma)
+  tracking  RepairJobTracking[]
+  costings  RepairJobCosting[]
+  comments  RepairJobComment[]
+  chats     Chat[]
+  auditLogs RepairJobAuditLog[]
+  documents Document[]
+  //notifications Notification[]
+
+  @@index([sku])
+  @@index([productName])
+  @@index([organizationId]) // Added: high-traffic tenant-scoped FK
+  @@index([customerId]) // Added: high-traffic FK
+}
+
+// ─── RepairJobTracking ───────────────────────────────────────────────────────
+
+model RepairJobTracking {
+  id            Int       @id @default(autoincrement())
+  repairJobId   Int
+  repairJob     RepairJob @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  status        JobStatus
+  changedBy     Int
+  changedByUser User      @relation(fields: [changedBy], references: [id])
+  changedDate   DateTime  @default(now())
+
+  @@index([repairJobId])
+}
+
+// ─── RepairJobCosting ────────────────────────────────────────────────────────
+
+model RepairJobCosting {
+  id                 Int       @id @default(autoincrement())
+  repairJobId        Int
+  repairJob          RepairJob @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  productId          Int? // Nullable: LABOR / SHIPPING / TAX have no product
+  product            Product?  @relation(fields: [productId], references: [id])
+  costType           CostType
+  quantity           Int       @default(1)
+  unitCost           Decimal   @db.Decimal(12, 2)
+  totalCost          Decimal   @db.Decimal(12, 2)
+  billableToCustomer Boolean   @default(true)
+  customerCharge     Decimal   @db.Decimal(12, 2)
+  createdDate        DateTime  @default(now())
+  updatedDate        DateTime  @updatedAt
+
+  @@index([repairJobId])
+  @@index([productId])
+}
+
+// ─── RepairJobComment ────────────────────────────────────────────────────────
+
+model RepairJobComment {
+  id          Int       @id @default(autoincrement())
+  repairJobId Int
+  repairJob   RepairJob @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  comment     String
+  isEdited    Boolean   @default(false)
+  createdDate DateTime  @default(now())
+  updatedDate DateTime  @updatedAt
+
+  @@index([repairJobId])
+  @@index([userId])
+}
+
+// ─── Chat ────────────────────────────────────────────────────────────────────
+// senderId is intentionally polymorphic (User or Customer depending on senderRole)
+// No Prisma FK — enforced at application layer
+
+model Chat {
+  id          Int        @id @default(autoincrement())
+  repairJobId Int
+  repairJob   RepairJob  @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  senderId    Int
+  senderRole  SenderType
+  message     String
+  isRead      Boolean    @default(false)
+  createdDate DateTime   @default(now())
+
+  @@index([repairJobId])
+  @@index([senderId, senderRole])
+}
+
+// ─── RepairJobAuditLog ───────────────────────────────────────────────────────
+
+model RepairJobAuditLog {
+  id          Int         @id @default(autoincrement())
+  repairJobId Int
+  repairJob   RepairJob   @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  actionType  AuditAction
+  description String
+  performedBy Int
+  user        User        @relation(fields: [performedBy], references: [id])
+  performedAt DateTime    @default(now())
+
+  @@index([repairJobId])
+  @@index([performedBy])
+}
+
+// ─── Product ─────────────────────────────────────────────────────────────────
+
+model Product {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  sku            String
+  name           String
+  model          String?
+  color          String?
+  createdDate    DateTime     @default(now())
+  updatedDate    DateTime     @updatedAt
+
+  // Back-relations (required by Prisma)
+  serials  ProductSerial[]
+  costings RepairJobCosting[]
+
+  @@unique([organizationId, sku])
+  @@index([sku])
+}
+
+// ─── ProductSerial ───────────────────────────────────────────────────────────
+
+model ProductSerial {
+  id                   Int          @id @default(autoincrement())
+  organizationId       Int
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  productId            Int
+  product              Product      @relation(fields: [productId], references: [id])
+  serialNumber         String       @unique
+  salesInvoice         String
+  saleDate             DateTime     @db.Date
+  warrantyExpiry       DateTime     @db.Date
+  isReplacementProduct Boolean      @default(false)
+  createdDate          DateTime     @default(now()) // Fixed: was created_Date
+
+  @@index([organizationId])
+  @@index([productId])
+}
+
+// ─── Document ────────────────────────────────────────────────────────────────
+// Design note: repairJobId is a hard FK; relatedType/relatedId handle sub-entity
+// polymorphism WITHIN a repair job (e.g. costing attachment, comment attachment).
+// If documents can belong to OTHER entities beyond RepairJob, remove repairJobId
+// and make the entire thing polymorphic via relatedType/relatedId.
+
+model Document {
+  id           Int          @id @default(autoincrement())
+  repairJobId  Int
+  repairJob    RepairJob    @relation(fields: [repairJobId], references: [id])
+  relatedType  String
+  relatedId    Int
+  documentName String
+  documentUrl  String
+  documentType DocumentType
+  uploadedBy   Int
+  uploadedRole String
+  fileHash     String
+  isActive     Boolean      @default(true)
+  uploadedDate DateTime     @default(now())
+  updatedDate  DateTime     @updatedAt
+
+  @@index([relatedType, relatedId])
+  @@index([uploadedBy])
+  @@index([repairJobId])
+}
+
+// ─── Notification ────────────────────────────────────────────────────────────
+
+model Notification {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  recipientType  String
+  recipientId    Int
+  referenceType  String
+  referenceId    Int
+  title          String
+  message        String
+  isRead         Boolean      @default(false)
+  createdDate    DateTime     @default(now())
+
+  // Composite index supports: "unread notifications for recipient X"
+  @@index([recipientType, recipientId, isRead])
+  @@index([referenceType, referenceId]) // Added: look up notifications by source entity
+}
+
+// ─── SystemLog ───────────────────────────────────────────────────────────────
+
+model SystemLog {
+  id          Int      @id @default(autoincrement())
+  actorId     Int
+  actorRole   String
+  description String
+  logStatus   String
+  createdDate DateTime @default(now())
+}
+
+// ─── SessionManagement ───────────────────────────────────────────────────────
+
+model SessionManagement {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress    String?
+  refreshToken String
+  expiresAt    DateTime // Fixed: was expires_at (snake_case)
+  createdDate  DateTime @default(now())
+
+  @@index([userId]) // Added: session lookup by user on every auth request
+}

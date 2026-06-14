@@ -1,21 +1,20 @@
-import mysql from "mysql2"
+import { Pool } from "pg";
 import dotenv from 'dotenv';
 dotenv.config()
 
-var pool = mysql.createPool({
-  connectionLimit: 50,
+const pool = new Pool({
   host: process.env.DATABASE_HOST,
-  user: process.env.DATABASE_USER ,
-  password: process.env.DATABASE_PASSWORD,
-  database: process.env.DATABASE_NAME,
-  multipleStatements: true,
-});
+  user: process.env.DATABASE_USER,
+  password:process.env.DATABASE_PASSWORD,
+  database:process.env.DATABASE_NAME,
+  max: 50,
+  idleTimeoutMillis: 30000,
+})
 
-
-pool.getConnection((err, connection) => {
-  if (err) throw err;
-  console.log("Database connected successfully");
+pool.connect((err,connection)=>{
+  if(err) throw err;
+  console.log("PG database connected successfully");
   connection.release();
-});
+})
 
-export default pool
+export default pool;
