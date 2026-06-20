@@ -16,6 +16,7 @@ import {resetPasswordTempate} from "../templates/resetPassword.template.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
 
 import prisma from "../db/prisma.js";
+import { where } from "sequelize"
 
 
 //import Model from "../models/demo.model.js"
@@ -165,26 +166,28 @@ const Log = new LogModel();
 const registerUser = asyncHandler(async (req,res) => {
     try{
             const {
-                first_name,
-                last_name, 
+                firstName,
+                lastName,
                 email, 
                 mobile,
                 role,
-                assigned_customer_id,
-                assigned_org_id,
+                assignedCustomerId,
+                assignedOrgId,
             } = req.body
 
 
             // validation of data
-            if([first_name,last_name,email,password,mobile,role,assigned_customer_id,assigned_org_id].some((field) => field?.trim() === "")){
+            if([firstName,lastName,email,password,mobile,role,assignedCustomerId,assignedOrgId].some((field) => field?.trim() === "")){
                 throw new ApiError(400, "All field are required")
             }
 
-            const existingUser =    await prisma.User.count();
+            const existingUser = await prisma.User.count({
+                where:{email}
+            });
+
             if(existingUser){
                 throw new ApiError(400,"User with email address is already exists !!!")
             }
-
 
             const password = generateRandomString(12);
             const encodepassword =  await bcrypt.hash(password, 10)
@@ -192,15 +195,15 @@ const registerUser = asyncHandler(async (req,res) => {
 
             const user = await prisma.User.create({
                 data:{
-                    first_name,
-                    last_name, 
+                    firstName,
+                    lastName, 
                     email ,
                     password:encodepassword, 
                     mobile,
                     role,
-                    is_active:0,
-                    is_locked:1, 
-                    activation_token: activationToken,
+                    isActive:false,
+                    isLocked:true, 
+                    activationToken: activationToken,
                 }
             })
 
@@ -224,15 +227,14 @@ const registerUser = asyncHandler(async (req,res) => {
                 where:{id:user},
                 omit: {
                     password: true,
-                    activation_token:true
+                    activationToken:true
                 },
             });
 
             const log={
-                actor_id: createduser.id,
-                actor_role: createduser.role, 
+                actorId: createduser.id,
+                actorRole: createduser.role, 
                 description : `${createduser.first_name + ' '+ createduser.last_name} is registered. `,
-                created_date: moment().format("YYYY-MM-DD HH:mm:ss")
             }
             
             // check for user creation
@@ -240,7 +242,7 @@ const registerUser = asyncHandler(async (req,res) => {
                 //send email for active the account.
                 const emailSend = await new Email().send(createduser.email,"RMA Service online account activation", signupEmailTempate(`http://localhost:3000/api/v1/users/activeuser/${createduser.activation_token}`)) 
                 
-                log.log_status =  "Successful";
+                log.logStatus =  "Successful";
                 await prisma.SystemLog.create({data:log})
 
                 if(emailSend){
@@ -251,7 +253,7 @@ const registerUser = asyncHandler(async (req,res) => {
              
             }else{
 
-                log.log_status =  "Failure";
+                log.logStatus =  "Failure";
                 await prisma.SystemLog.create({data:log})
                 return res.status(500).json(new ApiError(500, "Something went wrong while adding user"))
             }
@@ -383,13 +385,13 @@ const loginUser = asyncHandler( async (req,res)=>{
         }
 
         // check the active account 
-        if(user.is_active == 0 ){
+        if(user.isActive == false){
             return res.status(400).json(new ApiResponse(400,null, "User is not active. Please active the account or contact admin team."))   
         }
 
         const log={
-            actor_id: user.id,
-            actor_role:user.role,
+            actorId: user.id,
+            actorRole:user.role,
             description : `${user.first_name + " " + user.last_name} is login. `
         }
 
@@ -399,7 +401,7 @@ const loginUser = asyncHandler( async (req,res)=>{
 
 
         if(!isPasswordValid){
-            log.log_status =  "Faliure";
+            log.logStatus =  "Faliure";
             await prisma.SystemLog.create({data:log})
             //throw new ApiError(401, "password is not valid ")
             return res.status(400).json(new ApiResponse(400,null, "password is not valid."))
@@ -416,7 +418,7 @@ const loginUser = asyncHandler( async (req,res)=>{
             where:{id:user.id},
             omit:{
                 password:true,
-                activation_token:true
+                activationToken:true
             }
         })
 
@@ -425,17 +427,15 @@ const loginUser = asyncHandler( async (req,res)=>{
         }
 
         const data = {
-            user_id: loggedInUser.id,
-            jwt_token: accessToken,
-            refresh_token: refreshToken,
-            created_date: moment().format("YYYY-MM-DD HH:mm:ss"), 
+            userId: loggedInUser.id,
+            refreshToken: refreshToken,
         }
 
         // insert data into session table
-        await Session.create(data)
+        await prisma.SessionManagement.create(data)
 
         // insert data into log table
-        log.log_status =  "Successful";
+        log.logStatus =  "Successful";
         await prisma.SystemLog.create({data:log})
 
         const options = {
@@ -509,12 +509,13 @@ const logoutUser = asyncHandler(async(req,res)=>{
         //const user = User.findByField("id='"+userid+"'")
     
         const log={
-            actor_id: user.id,
-            actor_role:user.role,
+            actorId: user.id,
+            actorRole:user.role,
             description : `${user.first_name + " " + user.last_name} did the logout`,
-            log_status: "Successful",
+            logStatus: "Successful",
         }
-        await Log.create(log)
+
+        await prisma.SystemLog.create({data:log})
 
         // remove cookies
         const options = {
@@ -532,109 +533,225 @@ const logoutUser = asyncHandler(async(req,res)=>{
 
     } catch (error) {
         console.log("User COntroller :: Logout :: error ", error)
-        return res.status(400).json(new ApiError(400, `something went wrong in login the user ${error?.message}`))
+        return res.status(400).json(new ApiError(400, `something went wrong in logout the user ${error?.message}`))
     }
 })
 
 
 
-const changeCurrentPassword = asyncHandler( async (req, res) =>{
+// const changeCurrentPassword = asyncHandler( async (req, res) =>{
 
-    try{
+//     try{
+//         const {oldPassword, newPassword} = req.body
+
+//         //const user = await User.findById(req.user?.id)
+//         const user = req.user
+//         const isPasswordCorrect = await User.isPasswordCorrect(oldPassword, user.password)
+
+//         if(!isPasswordCorrect){
+//             return res.status(400).json(new ApiError(400, "Invalid old Password."))
+//         }
+
+//         const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
+//         const changePassword = await User.update({'id':user.id}, {password: encryptNewPassword})
+
+//         const log={
+//             actor_id: user.id,
+//             actor_role: user.role,
+//             description : `${user.first_name + " " + user.last_name} change the password`,
+//             created_date: moment().format("YYYY-MM-DD HH:mm:ss")
+//         }
+
+//         if(!changePassword){
+//             log.log_status =  "Unsuccessful";
+//             await Log.create(log)
+//             return res.status(400).json(new ApiError(400, " Issue while updateing the passowrd."))
+//         }
+
+//         log.log_status =  "Successful";
+//         await Log.create(log)
+        
+//         return res
+//         .status(200)
+//         .json(new ApiResponse(200, changePassword , "Password Changed Successfully"))
+//     }catch(error){
+//         console.log("User Controller :: Changerpassword :: error", error)
+//     }
+// })
+
+
+const changeCurrentPassword = asyncHandler(async(req, res) =>{
+    try {
+
         const {oldPassword, newPassword} = req.body
 
         //const user = await User.findById(req.user?.id)
         const user = req.user
-        const isPasswordCorrect = await User.isPasswordCorrect(oldPassword, user.password)
+        //const isPasswordCorrect = await prisma.User.isPasswordCorrect(oldPassword, user.password)
+        const isPasswordCorrect = await bcrypt.compare(oldPassword, user.password)
 
         if(!isPasswordCorrect){
             return res.status(400).json(new ApiError(400, "Invalid old Password."))
         }
 
         const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
-        const changePassword = await User.update({'id':user.id}, {password: encryptNewPassword})
-
+        const changePassword = await prisma.User.update({
+                where: {id:user.id}, 
+                data: {password: encryptNewPassword}
+        })
+        
+        
         const log={
-            actor_id: user.id,
-            actor_role: user.role,
+            actorId: user.id,
+            actorRole: user.role,
             description : `${user.first_name + " " + user.last_name} change the password`,
-            created_date: moment().format("YYYY-MM-DD HH:mm:ss")
         }
 
         if(!changePassword){
-            log.log_status =  "Unsuccessful";
-            await Log.create(log)
+            log.logStatus =  "Unsuccessful";
+            await prisma.SystemLog.create({data:log})
             return res.status(400).json(new ApiError(400, " Issue while updateing the passowrd."))
         }
 
-        log.log_status =  "Successful";
-        await Log.create(log)
+        log.logStatus =  "Successful";
+        await prisma.SystemLog.create({data:log})
         
         return res
         .status(200)
         .json(new ApiResponse(200, changePassword , "Password Changed Successfully"))
-    }catch(error){
+
+    } catch (error) {
         console.log("User Controller :: Changerpassword :: error", error)
+        return res.status(400).json(new ApiError(400, `something went wrong in change current password ${error?.message}`))
     }
 })
 
-const activeuser = asyncHandler( async (req, res) =>{
 
-    try{
+// const activeuser = asyncHandler( async (req, res) =>{
+
+//     try{
+//         const {token} = req.params
+
+//         //const user = await User.findByField("activation_token ='" + activation_token +"'") 
+//         //const user = await User.find({'activation_token':token}).execute()
+//         const user = await prisma.User.findUnique({
+//             where:{activationToken:token}
+//         })
+
+
+//         if(!user){
+//             return res.status(400).json(new ApiError(400,"Token is not recognised."))
+//         }
+
+//         const log={
+//             actor_id: user.id,
+//             actor_role: user.role,
+//             description : `${user.first_name + " " + user.last_name} is activated`,
+//             created_date: moment().format("YYYY-MM-DD HH:mm:ss")
+//         }
+
+//         const data = {
+//             is_active:true,
+//             is_locked:false,
+//             activation_token:null
+//         };
+          
+//         const timeDiffernce = diffTwoDateTime(moment().format("YYYY-MM-DD HH:mm:ss"),user.created_date)
+
+//         let updateUser = null;
+//         if(user ){
+//             if(timeDiffernce.hours < 24 &&  timeDiffernce.minutes < 1440 ){
+//                 updateUser = await User.update({'id':user.id}, data)
+
+//                 if(!updateUser){
+//                     log.log_status =  "Unsuccessful";
+//                     await Log.create(log)     
+//                     throw new ApiError(400,"error while updating activated the user account.")
+//                 }else{
+//                     log.log_status =  "Successful";
+//                     await Log.create(log)
+//                     return res.status(200).json(new ApiResponse(200, updateUser, "user account is activated successfully."))
+//                 }
+//             }else{
+//                 log.log_status =  "Unsuccessful";
+//                 await Log.create(log) 
+//                 throw new ApiError(400," Token is expired.")
+//             }
+//         }else{
+//             log.log_status =  "Unsuccessful";
+//             await Log.create(log) 
+//             throw new ApiError(400," Token is not recognised.")
+//         }
+
+//     }catch(error){
+//         console.log("User Controller :: Active User :: error ", error)
+//     }
+
+// })
+
+
+const activeUser = asyncHandler(async(req, res)=>{
+    try {
         const {token} = req.params
 
         //const user = await User.findByField("activation_token ='" + activation_token +"'") 
-        const user = await User.find({'activation_token':token}).execute()
+        //const user = await User.find({'activation_token':token}).execute()
+        const user = await prisma.User.findUnique({
+            where:{activationToken:token}
+        })
 
         if(!user){
             return res.status(400).json(new ApiError(400,"Token is not recognised."))
         }
 
         const log={
-            actor_id: user.id,
-            actor_role: user.role,
+            actorId: user.id,
+            actorRole: user.role,
             description : `${user.first_name + " " + user.last_name} is activated`,
-            created_date: moment().format("YYYY-MM-DD HH:mm:ss")
         }
 
         const data = {
-            is_active:true,
-            is_locked:false,
-            activation_token:null
+            isActive:true,
+            isLocked:false,
+            activationToken:null
         };
           
-        const timeDiffernce = diffTwoDateTime(moment().format("YYYY-MM-DD HH:mm:ss"),user.created_date)
+        const timeDiffernce = diffTwoDateTime(moment().format("YYYY-MM-DD HH:mm:ss"),user.createdDate)
 
         let updateUser = null;
         if(user ){
             if(timeDiffernce.hours < 24 &&  timeDiffernce.minutes < 1440 ){
-                updateUser = await User.update({'id':user.id}, data)
+                updateUser = await User.update({
+                    where:{'id':user.id}, 
+                    data : data
+                })
 
                 if(!updateUser){
-                    log.log_status =  "Unsuccessful";
-                    await Log.create(log)     
+                    log.logStatus =  "Unsuccessful";
+                    await prisma.SystemLog.create({data:log})
                     throw new ApiError(400,"error while updating activated the user account.")
                 }else{
-                    log.log_status =  "Successful";
-                    await Log.create(log)
+                    log.logStatus =  "Successful";
+                    await prisma.SystemLog.create({data:log})
                     return res.status(200).json(new ApiResponse(200, updateUser, "user account is activated successfully."))
                 }
             }else{
-                log.log_status =  "Unsuccessful";
-                await Log.create(log) 
+                log.logStatus =  "Unsuccessful";
+                await prisma.SystemLog.create({data:log})
                 throw new ApiError(400," Token is expired.")
             }
         }else{
-            log.log_status =  "Unsuccessful";
-            await Log.create(log) 
+            log.logStatus =  "Unsuccessful";
+            await prisma.SystemLog.create({data:log})
             throw new ApiError(400," Token is not recognised.")
         }
 
-    }catch(error){
+    } catch (error) {
         console.log("User Controller :: Active User :: error ", error)
+        return res.status(400).json(new ApiError(400, `something went wrong in change current password ${error?.message}`))
     }
-
 })
+
 
 const getUserDetail = asyncHandler( async (req, res) =>{
     try{
@@ -880,7 +997,7 @@ export { registerUser,
          loginUser, 
          logoutUser, 
          changeCurrentPassword, 
-         activeuser,
+         activeUser,
          getUserDetail,
          forgetPassword,
          listUser,

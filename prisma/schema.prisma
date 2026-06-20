@@ -446,7 +446,7 @@ model SessionManagement {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   ipAddress    String?
   refreshToken String
-  expiresAt    DateTime // Fixed: was expires_at (snake_case)
+  expiresAt    DateTime? // Fixed: was expires_at (snake_case)
   createdDate  DateTime @default(now())
 
   @@index([userId]) // Added: session lookup by user on every auth request
