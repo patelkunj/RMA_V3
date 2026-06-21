@@ -6,188 +6,141 @@ import moment from "moment";
 import prisma from "../db/prisma.js";
 
 
-// const Organization = new OrganizationModel(); 
-
-// const Organization = new OrganizationModel();
-
 // add pagination
 const listOrganization = asyncHandler(async (req, res) => {
-    const org = await prisma.organization.findMany();
 
-    return res.status(200).json(
-        new ApiResponse(200, org, "List of all organizations")
-    );
+    try {
+        const org = await prisma.organization.findMany();
+
+        if(!org){
+            res.status(200).json(new ApiResponse(200, null, " No organization found."))
+        }
+
+        return res.status(200).json(
+            new ApiResponse(200, org, "List of all organizations")
+        );
+
+    } catch (error) {
+        res.status(400).json(new ApiError(400, "Error while listing organization", error?.message ))
+    }
 });
-
-
-// const listOrganization = asyncHandler( async (req, res) =>{
-//     try{
-//         const org = await Organization.find().execute();
-
-//         if(!org){
-//             res.status(404).json(new ApiError(404, "No organization found"))
-//         }        
-//         res.status(200).json(new ApiResponse(200,org, "List of all organization"))
-
-//     }catch(error){
-//         throw new ApiError(400, "Error while listing organization. ")
-//     }
-// })
-
 
 const creatOrganization = asyncHandler(async (req, res) => {
-    const { name, alias, address, email, phone, is_active } = req.body;
 
-    if (!name || !alias) {
-        throw new ApiError(400, "Name and alias are required");
+    try {
+        const { name, alias, address, email, phone, isActive } = req.body;
+
+        if (!name || !alias) {
+            throw new ApiError(400, "Name and alias are required");
+        }
+
+        const org = await prisma.organization.create({
+            data: {
+                name,
+                alias,
+                address,
+                email,
+                phone,
+                isActive: Boolean(isActive)
+            }
+        });
+
+        return res.status(201).json(
+            new ApiResponse(201, org, "Organization created successfully")
+        );
+    } catch (error) {
+        res.status(400).json(new ApiError(400, "Error while creating organization.", error?.message ))
     }
 
-    const org = await prisma.organization.create({
-        data: {
-            name,
-            alias,
-            address,
-            email,
-            phone,
-            is_active: is_active ?? false,
-        }
-    });
 
-    return res.status(201).json(
-        new ApiResponse(201, org, "Organization created successfully")
-    );
+    
 });
 
-// const creatOrganization = asyncHandler( async (req, res) =>{
-//     try {
-
-//         const {name, alias, address, email, phone, is_active} = req.body
-
-//         if([name, alias, address, email, phone].some((field) => field?.trim() === "")){
-//             throw new ApiError(400, "All field are required")
-//         }
-
-//         const org = await Organization.create({
-//             name, 
-//             alias, 
-//             address,
-//             email,
-//             phone,
-//             is_active,
-//             created_date : moment().format("YYYY-MM-DD HH:mm:ss"),
-//             updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
-//         })
-
-//         if(!org){
-//             return res.status(400).json(new ApiError(400, "Error while inserting organizaiton."))
-//         }
-
-//         return res.status(200).json(new ApiResponse(200, org, "Organization created successfully."))
-
-//     } catch (error) {
-//         throw new ApiError(400, "Error while creating organization. " )
-//     }
-// });
 
 const updateOrganization = asyncHandler(async (req, res) => {
-    const { id, name, alias, address, email, phone, is_active } = req.body;
 
-    if (!id) {
-        throw new ApiError(400, "ID is required");
+    try {
+        const { id, name, alias, address, email, phone } = req.body;
+
+        if (!id) {
+            throw new ApiError(400, "ID is required");
+        }
+
+        const org = await prisma.organization.update({
+            where: { id: Number(id) },
+            data: {
+                name,
+                alias,
+                address,
+                email,
+                phone
+            }
+        });
+
+        return res.status(200).json(
+            new ApiResponse(200, org, "Organization updated successfully")
+        );
+    } catch (error) {
+        res.status(400).json(new ApiError(400, "Error while updating organization.", error?.message ))
     }
 
-    const org = await prisma.organization.update({
-        where: { id: Number(id) },
-        data: {
-            name,
-            alias,
-            address,
-            email,
-            phone,
-            is_active,
-        }
-    });
-
-    return res.status(200).json(
-        new ApiResponse(200, org, "Organization updated successfully")
-    );
+    
 });
-
-
-// const updateOrganization = asyncHandler( async (req, res) =>{
-//     try {
-        
-//         const {id, name, alias, address, email, phone, is_active} = req.body
-
-//         if([name, alias, address, email].some((field) => field?.trim() === "")){
-//             throw new ApiError(400, "All field are required")
-//         }
-
-//         const org = await Organization.update({'id':id},{
-//             name, 
-//             alias, 
-//             address,
-//             email,
-//             phone,
-//             is_active,
-//             updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
-//         })
-
-//         if(!org){
-//             return res.status(400).json(new ApiError(400, " Error while inserting organizaiton."))
-//         }
-
-//         return res.status(201).json(new ApiResponse(200, org, " Organization updated successfully."))
-
-//     } catch (error) {
-//         throw new ApiError(400, "Error while updating organization. " )
-//     }
-// });
 
 
 const toggleStatus = asyncHandler(async (req, res) => {
-    const { id, is_active } = req.body;
 
-    if (!id) {
-        throw new ApiError(400, "ID is required");
-    }
+    try {
+        const { id} = req.body;
 
-    const org = await prisma.organization.update({
-        where: { id: Number(id) },
-        data: {
-            is_active,
+        if (!id) {
+            throw new ApiError(400, "ID is required");
         }
-    });
 
-    return res.status(200).json(
-        new ApiResponse(200, org, "Status updated successfully")
-    );
+        const orgData = await prisma.organization.findUnique({
+            where:{id:Number(id)}
+        })
+
+
+        const org = await prisma.organization.update({
+            where:{id:Number(id)},
+            data:{isActive:Boolean(!orgData.isActive)}
+        });
+
+        return res.status(200).json(
+            new ApiResponse(200, org, "Status updated successfully")
+        );
+    } catch (error) {
+        res.status(400).json(new ApiError(400, "Error while changing status of organization. ", error?.message ))
+    }
 });
 
-// const toggleStatus = asyncHandler( async (req, res) =>{
-//     try {
-        
-//         const {id,is_active} = req.body
 
-//         if([id].some((field) => field?.trim() === "")){
-//             throw new ApiError(400, "All field are required")
-//         }
+const getOrganizationDetail = asyncHandler(async (req, res)=> {
 
-//         const org = await Organization.update({'id':id},{
-//             is_active,
-//             updated_date : moment().format("YYYY-MM-DD hh:mm:ss")
-//         })
+    try {
+        const {id} = req.params;
 
-//         if(!org){
-//             return res.status(400).json(new ApiError(400, " Error while change the status"))
-//         }
+        if(!id){
+            res.status(400).json(new ApiError(400, " organization data not found"))
+        }
 
-//         return res.status(201).json(new ApiResponse(200, org, " Organization updated successfully."))
+        const orgData = await prisma.organization.findUnique({
+            where:{id:Number(id)}
+        })
 
-//     } catch (error) {
-//         throw new ApiError(400, "Error while changing status of organization. " )
-//     }
-// });
+        if(!orgData){
+            res.status(200).json(new ApiResponse(200, null, " Organization detail not found."))
+        }
+        res.status(200).json(new ApiResponse(200, orgData, "Organization data found."));
+
+    } catch (error) {
+        res.status(400).json(new ApiError(400, "Error while getting detail of organization. ", error?.message ))
+    }
+
+
+})
+
 
 // const searchCompany = asyncHandler(async(req,res)=>{
 //     try {
@@ -229,6 +182,7 @@ export {
     creatOrganization,
     updateOrganization,
     toggleStatus,
+    getOrganizationDetail
     // searchCompany,
     // allCompany
 }

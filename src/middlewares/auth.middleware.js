@@ -1,8 +1,12 @@
-import {UserModel} from "../models/user.model.js";
+//import {UserModel} from "../models/user.model.js";
 import { CustomerModel } from "../models/customer.model.js";
 import {ApiError}  from "../utils/ApiError.js";
 import {asyncHandler} from "../utils/asyncHandler.js";
 import jwt from "jsonwebtoken"
+import prisma from "../db/prisma.js";
+
+
+
 
 export const verfiyJWT = asyncHandler(async(req, res, next)=>{
      try {
@@ -14,8 +18,12 @@ export const verfiyJWT = asyncHandler(async(req, res, next)=>{
    
        const decodeedToken= jwt.verify(token, process.env.ACCESS_TOKEN_SECRET)
    
-       const User = new UserModel();
-       const user = await User.find({'id': decodeedToken?.id,'email':decodeedToken?.email}).execute();
+       //const User = new UserModel();
+       //const user = await User.find({'id': decodeedToken?.id,'email':decodeedToken?.email}).execute();
+
+       const user = await prisma.User.findUnique({
+         where:{id: decodeedToken?.id,email:decodeedToken?.email}
+       })
    
        if(!user){
 

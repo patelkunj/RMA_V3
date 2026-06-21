@@ -10,7 +10,9 @@
   "author": "kunj patel",
   "license": "ISC",
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^6.19.3",
+    "@prisma/config": "^7.8.0",
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
@@ -23,8 +25,8 @@
     "mysql2": "^3.12.0",
     "nodemailer": "^6.10.0",
     "nodemon": "^3.1.9",
-    "pg": "^8.20.0",
-    "prisma": "^5.22.0",
+    "pg": "^8.22.0",
+    "prisma": "^6.19.3",
     "sequelize": "^6.37.8",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"

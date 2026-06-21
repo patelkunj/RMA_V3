@@ -5,13 +5,13 @@ import {loginUser,
         registerUser, 
         logoutUser, 
         changeCurrentPassword,
-        activeuser,
+        activeUser,
         getUserDetail, 
         forgetPassword,
         listUser,
         getUserById,
         updateUser,
-        searchUser,
+        //searchUser,
         toggleStatus
     } from "../controllers/user.controller.js"
 
@@ -22,7 +22,7 @@ const router = Router()
 
 
 router.route("/login").post(loginUser)
-router.route("/activeuser/:token").get(activeuser)
+router.route("/activeuser/:token").get(activeUser)
 router.route("/getUserDetail").post(getUserDetail)
 router.route("/forgetPassword/:token").post(forgetPassword)
 
@@ -33,11 +33,11 @@ router.route("/logout").post(verfiyJWT,logoutUser)
 router.route("/change_password").post(verfiyJWT,changeCurrentPassword)
 
 //Authorised Routes
-//router.route("/register").post(verfiyJWT, authorizeRoles(["Admin","Super Admin"]),registerUser)
-router.route("/list_user").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),listUser)
-router.route("/user").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),getUserById)
-router.route("/update_user").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),updateUser)
-router.route("/search").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),searchUser)
-router.route("/toggle").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),toggleStatus)
+//router.route("/register").post(verfiyJWT, authorizeRoles(["ADMIN","Super Admin"]),registerUser)
+router.route("/list_user").post(verfiyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),listUser)
+router.route("/user").post(verfiyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),getUserById)
+router.route("/update_user").put(verfiyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateUser)
+//router.route("/search").post(verfiyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchUser)
+router.route("/toggle").put(verfiyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),toggleStatus)
 
 export default router
