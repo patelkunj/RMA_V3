@@ -1,11 +1,6 @@
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
-//import {UserModel} from "../models/user.model.js"
-// import {UserCustomerModel} from "../models/usercustomer.model.js"
-// import { UserOrganizationModel } from "../models/userorganization.model.js"
-//import {SessionModel} from "../models/session.model.js"
-//import { LogModel } from "../models/log.model.js"
 import moment from "moment"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
@@ -539,6 +534,8 @@ const updateUser = asyncHandler( async (req, res) =>{
             email,
             mobile,
             role,
+            assignedCustomer,
+            assignedOrg,
             is_active
         } = req.body
 
@@ -555,6 +552,10 @@ const updateUser = asyncHandler( async (req, res) =>{
                 mobile:mobile,
                 role:role,
                 isActive:is_active
+            },
+            omit:{
+                password:true,
+                activationToken: true
             }
         })
 
@@ -571,22 +572,43 @@ const updateUser = asyncHandler( async (req, res) =>{
         }
 
         //update the assign customer 
-        //const userCustomerData = await UserCustomer.updateMany(id,assigned_customer_id.split(","))
+        const userCustomerData = await Promise.all(
+            assignedCustomer.map(customer =>
+                prisma.userCustomer.update({
+                    where: {
+                            id: customer.id
+                    },
+                    data: {
+                        userId: customer.userId,
+                        customerId: customer.customerId
+                    }
+        })));
+    
 
-        //update the assign organization
-        //const userOrganizationData = await UserOrganization.updateMany(id, assigned_org_id.split(","))
+        //update the assign organization)
+        const userOrganizationData = await Promise.all(
+            assignedOrg.map(organization =>
+                prisma.UserOrganization.update({
+                    where: {
+                            id: organization.id
+                    },
+                    data: {
+                        userId: organization.userId,
+                        organizationId: organization.organizationId
+
+                    }
+        })));
 
 
-        // if(!userCustomerData || !userOrganizationData ){
-        //     return res.status(400).json(new ApiError(400, " Error while updating the Customer and Organization"))
-        // }
 
-        // const update_user = await User.find({id:req.body.id},['password','activation_token']).execute();
+        if(!userCustomerData || !userOrganizationData ){
+            return res.status(400).json(new ApiError(400, " Error while updating the Customer and Organization"))
+        }
 
-        // log.logStatus = "Successful";
-        // await prisma.SystemLogLog.create({data:log})
+        log.logStatus = "Successful";
+        await prisma.SystemLogLog.create({data:log})
 
-        // res.status(200).json(new ApiResponse(200, update_user, " User updated successfully"))
+        res.status(200).json(new ApiResponse(200, update_user, " User updated successfully"))
 
     }catch(error){
         return res.status(400).json(new ApiError(500, `Error while updateing user :: ${error?.message}`))
