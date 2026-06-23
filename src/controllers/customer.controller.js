@@ -15,85 +15,61 @@ import {resetPasswordTempate} from "../templates/resetPassword.template.js"
 import {generateRandomString, diffTwoDateTime} from "../utils/common.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
 
+import prisma from "../db/prisma.js"
+import { Prisma } from "@prisma/client"
+import { dmmfToRuntimeDataModel } from "@prisma/client/runtime/library"
+import { where } from "sequelize"
 
-const Customer = new CustomerModel();
-const Session = new SessionModel();
-const Log = new LogModel();
-const UserCustomer = new UserCustomerModel();
-const Org = new OrganizationModel();
+// const Customer = new CustomerModel();
+// const Session = new SessionModel();
+// const Log = new LogModel();
+// const UserCustomer = new UserCustomerModel();
+// const Org = new OrganizationModel();
 
-// Method for generate tokens  
-// TODO: Need to revise the method
 
-// const generateAccessAndRefereshToken = async(user) => {
 
-//     try{
-//         const accessToken= jwt.sign(
-//             {
-//                 id:user.id,
-//                 email:user.email,
-//                 company_name:user.company_name
-//             },
-//             process.env.ACCESS_TOKEN_SECRET,
-//             {
-//                 expiresIn: process.env.ACCESS_TOKEN_EXPIRY
-//             }
-//         )
-
-//         const refreshToken= jwt.sign(   
-//             {
-//                 id:user.id
-//             },
-//             process.env.REFRESH_TOKEN_SECRET,
-//             {
-//                 expiresIn: process.env.REFRESH_TOKEN_EXPIRY
-//             }
-//         )
-
-//         return {accessToken, refreshToken}
-
-//     }catch(error){
-//         throw new ApiError(400, "something went wrong on generate token -> ", error)
-//     }
-// }
 
 const registerCustomer = asyncHandler(async (req,res) => {
     try{
             // get data from user
             const {
-                organization_id,
-                company_name,
+                organizationId,
+                companyName,
                 email,
-                contact_person_name,
-                contact_person_email,
+                contactPersonName,
+                contactPersonEmail,
                 mobile,
-                return_address,
+                returnAddress,
                 //organization,
-                warranty_months,
-                warranty_type,
-                doa_warranty_days,
-                doa_warranty_type,
-                warranty_remarks,
-                is_pickup_faulty,
-                sales_person,
+                warrantyMonths,
+                warrantyType,
+                doaWarrantyDays,
+                doaWarrantyType,
+                warrantyRemarks,
+                isPickupFaulty,
+                salesPerson,
             } = req.body 
 
             // validation of data
-            if([company_name,email,contact_person_name,contact_person_email,return_address,warranty_months, warranty_type, doa_warranty_days, doa_warranty_type,sales_person].some((field) => field?.trim() === "")){
+            if([companyName,email,contactPersonName,contactPersonEmail,returnAddress,warrantyMonths, warrantyType, doaWarrantyDays, doaWarrantyType,warrantyRemarks,salesPerson].some((field) => field?.trim() === "")){
                 return res.status(400).json(new ApiError(400, "All field are required"))
             }
 
-            // check if user is already exist 
-            //const existingUser =  await Customer.findByField("company_name='" + company_name+"'")
-            const existingUser =  await Customer.find({'company_name':company_name, 'email':email}).execute()
+            const existingCustomer = await prisma.Customer.findUnique({
+                where:{company_name:company_name, email:email}
+            })
 
-            if(existingUser){
+    
+            if(existingCustomer){
                 return res.status(400).json(new ApiError(400,"Customer with company name is already exists !!!"))
             }
 
             // generate the store code/ customer code
-            const org = await Org.find({'id':organization_id}).execute();
-            const last_StoreCode = await Customer.selectFields('id').orderBy('id',"DESC").limit(1).execute();
+            const org = await prisma.Orgazation.findUnique({ where:{id:organization_id }})
+            //const last_StoreCode = await Customer.selectFields('id').orderBy('id',"DESC").limit(1).execute();
+            const last_StoreCode = await prisma.Customer.findFirst({
+                orderBy: {id: 'DESC'},
+            })
             let Store_code = last_StoreCode ? `${org.alias}${String(Number(last_StoreCode.id) + 1 ).padStart(2, '0')}` : `${org.alias}01`  ; 
 
         
@@ -103,52 +79,51 @@ const registerCustomer = asyncHandler(async (req,res) => {
 
             // create user object - create DB entry
             const customer = await Customer.create({
-                company_name,
-                store_code: Store_code,
-                email,
-                password:encodepassword,
-                contact_person_name,
-                contact_person_email,
-                mobile,
-                return_address,
-                //organization_id: Number(organization.value) ,
-                organization_id,
-                warranty_months: Number(warranty_months),
-                warranty_type,
-                doa_warranty_days: Number(doa_warranty_days),
-                doa_warranty_type,
-                warranty_remarks,
-                is_pickup_faulty,
-                sales_person, 
-                is_active:0,
-                is_locked:1, 
-                activation_token: activationToken,
-                created_date : moment().format("YYYY-MM-DD HH:mm:ss"),
-                updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
+                data:{
+                    companyName,
+                    customerCode:Store_code,
+                    email,
+                    password:encodepassword,
+                    contactPersonName,
+                    contactPersonEmail,
+                    mobile,
+                    returnAddress,
+                    //organization_id: Number(organization.value) ,
+                    organizationId,
+                    warrantyMonths: Number(warranty_months),
+                    warrantyTypes,
+                    doaWarrantyDays: Number(doa_warranty_days),
+                    doaWarrantyTypes,
+                    warrantyRemarks,
+                    isPickupFaulty,
+                    salesPerson, 
+                    isActive:false,
+                    isLocked:true, 
+                    activationToken: activationToken,
+                }
             });
 
             // remove add password and refresh token field from response
-            const createdcustomer = await Customer.find({id:customer},['password','activation_token']).execute();
+            //const createdcustomer = await Customer.find({id:customer},['password','activation_token']).execute();
 
             const log={
-                actor_id: req.user?.id,
-                actor_role: req.user?.role, 
-                description : `Register a customer - ${createdcustomer.company_name}`,
-                created_date: moment().format("YYYY-MM-DD HH:mm:ss")
+                actorId: req.user?.id,
+                actorRole: req.user?.role, 
+                description : `Register a customer - ${customer.companyName}`,
             }
 
             // check for customer creation
-            if(createdcustomer){
+            if(customer){
                 // Assign Customer in to All the user with Full Assign type.
                 // const customer_id = "," + customer;
                 //await User.assignStore(customer_id)
 
 
                 //send email for active the account.
-                const emailSend = await new Email().send(createdcustomer.email,"RMA Service online account activation", signupEmailTempate(`http://localhost:3000/api/v1/customers/activecustomer/${createdcustomer.activation_token}`)) 
+                const emailSend = await new Email().send(customer.email,"RMA Service online account activation", signupEmailTempate(`http://localhost:3000/api/v1/customers/activecustomer/${createdcustomer.activation_token}`)) 
                 
-                log.log_status =  "Successful";
-                await Log.create(log)
+                log.logStatus =  "Successful";
+                await prisma.SystemLog.create({data:log})
 
                 if(emailSend){
                     return res.status(200).json(new ApiResponse(200, createdcustomer, " Customer register successfully and send an activation email"))
@@ -158,20 +133,19 @@ const registerCustomer = asyncHandler(async (req,res) => {
              
             }else{
 
-                log.log_status =  "Failure";
-                await Log.create(log)
+                log.logStatus =  "Failure";
+                await prisma.SystemLog.create({data:log})
                 return res.status(400).json(new ApiResponse(400,"something went wrong in register the customer"))
             }
 
     }catch(error){
         const log={
-            actor_id: req.user.id,
-            actor_role: req.user.role, 
-            description : `${error.message}`,
-            created_date: moment().format("YYYY-MM-DD HH:mm:ss"),
-            log_status: "Failure"
+            actorId: req.user.id,
+            actorRole: req.user.role, 
+            description : `${error.message}`,         
+            logStatus: "Failure"
         }
-        await Log.create(log)
+        await prisma.SystemLog.create({data:log})
         return res.status(400).json(new ApiResponse(400,"something went wrong in register the customer"))
     }
     
@@ -191,15 +165,16 @@ const loginCustomer = asyncHandler( async (req, res) =>{
 
         // check user in db
         //const customer = await Customer.findByField("email ='" + email+"'")
-        const customer = await Customer.find({'email':email}).execute();
+        //const customer = await Customer.find({'email':email}).execute();
+        const customer = await prisma.customer.findUnique({ where:{ email }})
 
         if(!customer){
             return res.status(400).json(ApiError(400,"please enter correct email address."))
         }
 
         const log={
-            actor_id: customer.id,
-            actor_role: "customer", 
+            actorId: customer.id,
+            actorRole: "customer", 
             description : `${customer.company_name} login into the system.`
         }
 
@@ -207,8 +182,8 @@ const loginCustomer = asyncHandler( async (req, res) =>{
         // password check
         const isPasswordValid = await Customer.isPasswordCorrect(password,customer.password)
         if(!isPasswordValid){
-            log.log_status =  "Faliure";
-            await Log.create(log)
+            log.logStatus =  "Faliure";
+            await prisma.Log.create({data:log})
             return res.status(401).json(new ApiError(401, "password is not valid "))
         }
 
@@ -220,6 +195,16 @@ const loginCustomer = asyncHandler( async (req, res) =>{
         // send cookies
         //const loggedInUser= await User.findById(user.id)
         const loggedInCustomer = await Customer.find({id:customer.id},['password','activation_token']).execute();
+        const loggedInCustomer = await prisma.Customer.findUnique({
+            where:{id:customer.id},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
+
 
         if(!loggedInCustomer){
             return res.status(400).json(new ApiError(400,"Customer not found...."))
@@ -227,16 +212,15 @@ const loginCustomer = asyncHandler( async (req, res) =>{
 
         const data = {
             user_id: loggedInCustomer.id,
-            jwt_token: accessToken,
             refresh_token: refreshToken,
         }
 
         // insert data into session table
-        await Session.create(data)
+       await prisma.SessionManagement.create({data:data})
 
         // insert data into log table
-        log.log_status =  "Successful";
-        await Log.create(log)
+        log.logStatus =  "Successful";
+        await prisma.SystemLog.create({data:log})
 
         const options = {
             httpOnly : true,
@@ -260,6 +244,7 @@ const loginCustomer = asyncHandler( async (req, res) =>{
         )
     }catch(error){
         console.log(" Customer Controller :: Login Customer :: error ", error?.message)
+        return res.status(400).json(new ApiError(400, `something went wrong in login the user`, error?.message))
     }
 
 })
@@ -269,26 +254,23 @@ const logoutCustomer = asyncHandler( async (req, res) =>{
     try{
 
         // Add JWT token into Database 
-        const customer = await Customer.find({'id':req.customer?.id}).execute();
-
-        if(!customer){
-            res.status(403).json(new ApiResponse(403, null, "Forbidden: Something is worng to process logout."))
-        }
-
+        const customer = req.customer
+        //const user = User.findByField("id='"+userid+"'")
+    
         const log={
-            actor_id: customer.id,
-            actor_role: "customer", 
-            description : `${customer.company_name} did the logout`,
-            log_status: "Successful",
-            created_date: moment().format("YYYY-MM-DD HH:mm:ss")
+            actorId: customer.id,
+            actorRole:customer.role,
+            description : `${customer.companyName} did the logout`,
+            logStatus: "Successful",
         }
-        await Log.create(log)
 
         // remove cookies
         const options = {
             httpOnly : true,
             secure: true
         }
+
+        await prisma.SystemLog.create({data:log})
 
         return res
         .status(200)
@@ -300,6 +282,7 @@ const logoutCustomer = asyncHandler( async (req, res) =>{
 
     }catch(error){
         console.log("Customer COntroller :: Logout :: error ", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in logout the customer", error?.message))
     }
 
 })
@@ -308,38 +291,54 @@ const changeCurrentPassword = asyncHandler( async (req, res) =>{
 
     try{
         const {oldPassword, newPassword} = req.body
-    
-        const customer = await Customer.find({'id':req.customer?.id}).execute()
-        const isPasswordCorrect = await Customer.isPasswordCorrect(oldPassword, customer.password)
+
+        if(!(oldPassword) && !(newPassword)){
+            return res.status(400).json(new ApiError(400, "passwords are required"))
+        }
+
+        const customer = await prisma.Customer.findUnique({
+            where:{id:req.customer?.id}
+        })
+        const isPasswordCorrect = await bcrypt.compare(oldPassword, customer.password)
 
         if(!isPasswordCorrect){
-            throw new ApiError(400, "Invalid Password")
+            return res.status(400).json(new ApiError(400, "Invalid Password"))
         }
 
         const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
-        const changePassword = await Customer.update({'id':customer.id}, {password: encryptNewPassword})
+        //const changePassword = await Customer.update({'id':customer.id}, {password: encryptNewPassword})
+        const changepassword = await prisma.Customer.update({
+            where:{id:customer.id},
+            data:{password: encryptNewPassword},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
 
         const log={
-            actor_id: customer.id,
-            actor_role: "customer",
+            actorId: customer.id,
+            actorRole: "customer",
             description : `${customer.company_name} change the password`,
-            created_date: moment().format("YYYY-MM-DD HH:mm:ss")
         }
 
         if(!changePassword){
-            log.log_status =  "Unsuccessful";
-            await Log.create(log)
-            throw new ApiError(400, " Issue while updateing the passowrd.")
+            log.logStatus =  "Unsuccessful";
+            await prisma.SystemLog.create({data:log})
+            return res.status(400).json(new ApiError(400, " Issue while updateing the passowrd."))
         }
         
         log.log_status =  "Successful";
-        await Log.create(log)
+        await prisma.SystemLog.create({data:log})
 
         return res
         .status(200)
         .json(new ApiResponse(200, changePassword , "Password Changed Successfully"))
     }catch(error){
         console.log("Customer Controller :: Changerpassword :: error", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in change password for customer", error?.message))
     }
 })
 
@@ -348,52 +347,66 @@ const activeCustomer = asyncHandler( async (req, res) =>{
     try{
         const {token} = req.params
 
-        const customer = await Customer.find({'activation_token':token}).execute();
+        //const customer = await Customer.find({'activation_token':token}).execute();
+        const customer =await prisma.Customer.findUnique({
+            where:{activationToken:token}
+        })
 
         if(!customer){
             return res.status(400).json(new ApiError(400, " Error while activating account."))
         }
 
         const log={
-            actor_id: customer.id,
-            actor_role: "customer",
+            actorId: customer.id,
+            actorRole: "customer",
             description : `${customer.company_name} account is activated. `
         }
 
         const data = {
-            is_active:true,
-            is_locked:false,
-            activation_token:null
+            isActive:true,
+            isLocked:false,
+            activationToken:null
         };
           
         const timeDiffernce = diffTwoDateTime(moment().format("YYYY-MM-DD HH:mm:ss"),customer.created_date)
 
         if(customer){
             if(timeDiffernce.hours < 24 &&  timeDiffernce.minutes < 1440 ){
-                const updateCustomer = await Customer.update({'id':customer.id}, data)
+                //const updateCustomer = await Customer.update({'id':customer.id}, data)
+                const updateCustomer = await prisma.Customer.update({
+                    where:{id:customer.id},
+                    data:data,
+                    omit:{
+                        password:true,
+                        activationToken:true,
+                        passwordResetToken:true,
+                        passwordResetExpires:true
+                    }
+                })
  
                 if(!updateCustomer){
-                    log.log_status =  "Unsuccessful";
-                    await Log.create(log)
+                    log.logStatus =  "Unsuccessful";
+                    await prisma.SystemLogLog.create({data:log})
                     return res.status(400). json(new ApiError(400,"error while updating activated the customer account." ))
                 }else{
-                    log.log_status =  "Successful";
-                    await Log.create(log)  
+                    log.logStatus =  "Successful";
+                    await prisma.SystemLogLog.create({data:log})
                 }
                 return res.status(200).json(new ApiResponse(200, updateCustomer, "customer account is activated successfully."))
             }else{
-                log.log_status =  "Unsuccessful";
-                await Log.create(log)
-                throw new ApiError(400," Token is expired.")
+                log.logStatus =  "Unsuccessful";
+                await prisma.SystemLogLog.create({data:log})
+                return res.status(400).json(new ApiError(400," Token is expired."))
             }
         }else{
             log.log_status =  "Unsuccessful";
             await Log.create(log)
-            throw new ApiError(400," Token is not recognised.")
+            return res.status(400).json( new ApiError(400," Token is not recognised."))
         }
 
     }catch(error){
         console.log("customer Controller :: Active customer :: error ", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in active customer", error?.message))
     }
 
 })
@@ -402,8 +415,22 @@ const getCustomerInfo = asyncHandler( async (req, res) =>{
     try{
 
         const {email} = req.body
+
+        if(!email){
+            return res.status(400).json(new ApiError(400," email is required."))
+        }
+
         //const customer = await Customer.findByField("email='"+email+"'")
-        const customer = await Customer.find({'email':email},['password','activation_token'])
+        //const customer = await Customer.find({'email':email},['password','activation_token'])
+        const customer = await prisma.Customer.findUnique({
+            where:{email},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
 
         if(customer){
            return res.status(201).json(new ApiResponse(200, customer, " Fetch the customer information successfully. "))
@@ -412,6 +439,7 @@ const getCustomerInfo = asyncHandler( async (req, res) =>{
         }
     }catch(error){
         console.log(" Customer Controller :: getCustomerDetail :: error ", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in getting customer info.", error?.message))
     }
 })
 
@@ -420,16 +448,40 @@ const getCustomerDetail = asyncHandler( async (req, res) =>{
     try{
 
         const {email} = req.body
+        if(!email){
+            return res.status(400).json(new ApiError(400," email is required."))
+        }
+
         //const customer = await Customer.findByField("email='"+email+"'")
-        const customer = await Customer.find({'email':email}).execute();
+        //const customer = await Customer.find({'email':email}).execute();
+        const customer = await prisma.Customer.findUnique({
+            where:{email},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
 
         if(customer){
-            const activationToken = generateRandomString(55);
+            const passwordResetToken = generateRandomString(55);
             const data = {
-                activation_token: activationToken
+                 isLocked: true,
+                passwordResetToken: passwordResetToken,
+                passwordResetExpires:moment().format("YYYY-MM-DD HH:mm:ss")
+
             };
 
-            const updateCustomer= await Customer.update({'id':customer.id}, data)
+            const updateCustomer= await prisma.Customer.update({
+                where:{id:customer.id},
+                data:data,
+                omit:{
+                    password:true,
+                    activationToken:true
+                }
+            })
+
             if(updateCustomer){
 
                 const emailSend = await new Email().send(customer.email,"Reset Password", resetPasswordTempate(`http://localhost:3000/api/v1/customers/forgetPassword/${activationToken}`)) 
@@ -446,6 +498,7 @@ const getCustomerDetail = asyncHandler( async (req, res) =>{
         }
     }catch(error){
         console.log(" Customer Controller :: getCustomerDetail :: error ", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in getting customer detail.", error?.message))
     }
 })
 
@@ -454,32 +507,46 @@ const forgetPassword = asyncHandler( async (req, res) =>{
         
             const {token} = req.params
             const {newPassword} = req.body
+
+            if((!token) && (!newPassword)){
+                return res.status(500).json(new ApiError(400, " password is required."))
+            }
  
             //const customer = await Customer.findByField(" activation_token ='" + token+"'") 
-            const customer = await Customer.find({'activation_token':token}).execute(); 
+            //const customer = await Customer.find({'activation_token':token}).execute(); 
+            const customer = await prisma.Customer.findUnique({
+                where:{passwordResetToken:token},
+                omit:{
+                    password:true,
+                    activationToken:true
+                }
+            })
 
             const log={
-                actor_id: customer.id,
-                actor_role: "customer",
+                actorId: customer.id,
+                actorRole: "customer",
                 description : `${customer.company_name} password has been changed.`,
             }
+
+             const timeDiffernce = diffTwoDateTime(moment().format("YYYY-MM-DD HH:mm:ss"),customer.passwordResetExpires)
              
-            if(customer.activation_token == token){
+            if(customer.passwordResetToken == token && timeDiffernce.minutes < 30 ){
                 const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
                 const changePassword = await Customer.update({'id':customer.id}, {
                     password: encryptNewPassword, 
-                    is_active:true,  
-                    activation_token: null,
+                    isLocked:false,  
+                    passwordResetToken: null,
+                    passwordResetExpires:null
                  })
 
                 if(!changePassword){
-                    log.log_status =  "Unsuccessful";
-                    await Log.create(log)
+                    log.logStatus =  "Unsuccessful";
+                    await prisma.SystemLog.create({data:log})
                     throw new ApiError(400, " Issue while updateing the passowrd.")
                 }
                 
-                log.log_status =  "Successful";
-                await Log.create(log)
+                log.logStatus =  "Successful";
+                await prisma.SystemLog.create({data:log})
 
                 return res
                 .status(200)
@@ -489,6 +556,7 @@ const forgetPassword = asyncHandler( async (req, res) =>{
             }
     }catch(error){
         console.log('Customer Controller :: forgetPassword :: error ', error?.message )
+        return res.status(400).json(new ApiError(400, "something went wrong in forgot customer password.", error?.message))
     }
 
 })
@@ -496,7 +564,15 @@ const forgetPassword = asyncHandler( async (req, res) =>{
 const listCustomer = asyncHandler( async (req, res) =>{
     try{
 
-        const customer = await Customer.find({}, ['password','activation_token']).execute();
+        //const customer = await Customer.find({}, ['password','activation_token']).execute();
+        const customer = await prisma.Customer.findMany({
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
         if(!customer){
             return res.status(400).json(new ApiError(400, "No customer found."))
         }   
@@ -504,6 +580,7 @@ const listCustomer = asyncHandler( async (req, res) =>{
 
     }catch(error){
         throw new ApiError(400, "Error in listing customer", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in listing customers.", error?.message))
     }
 })
 
@@ -511,51 +588,59 @@ const updateCustomer = asyncHandler( async (req, res) =>{
     try{
         const {
             id,
-            company_name,
+            companyName,
             email,
-            contact_person_name,
-            contact_person_email,
+            contactPersonName,
+            contactPersonEmail,
             mobile,
-            return_address,
-            warranty_months,
-            warranty_type,
-            doa_warranty_days,
-            doa_warranty_type,
-            warranty_remarks,
-            sales_person,
-            is_pickup_faulty,
+            returnAddress,
+            warrantyMonths,
+            warrantyType,
+            doaArrantyDays,
+            doaWarrantyType,
+            warrantyRemarks,
+            salesPerson,
+            isPickupFaulty
         } = req.body
 
-        if([company_name,email,contact_person_name,return_address, warranty_type, doa_warranty_type,sales_person].some((field) => field?.trim() === "")){
+        if([companyName,email,contactPersonName,contactPersonEmail,returnAddress,warrantyMonths, warrantyType, doaArrantyDays,doaWarrantyType,warrantyRemarks,salesPerson].some((field) => field?.trim() === "")){
             throw new ApiError(400, "All field are required")
         }
         
-        const customer = await Customer.update({'id':id},{
-            company_name,
-            email,
-            contact_person_name,
-            contact_person_email,
-            mobile,
-            return_address,
-            warranty_months,
-            warranty_type,
-            doa_warranty_days,
-            doa_warranty_type,
-            warranty_remarks,
-            sales_person,
-            is_pickup_faulty
+        const customer = await Customer.update({
+            where:{id:id},
+            data:{
+                companyName,
+                email,
+                contactPersonName,
+                contactPersonEmail,
+                mobile,
+                returnAddress,
+                warrantyMonths,
+                warrantyType,
+                doaArrantyDays,
+                doaWarrantyType,
+                warrantyRemarks,
+                salesPerson,
+                isPickupFaulty
+            },
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
         })
 
         if(!customer){
             return res.status(400).json(new ApiError(400, "Error while updating customer."))
         }
 
-        const updatedCustomer = await Customer.find({id:customer},['password','activation_token']).execute();
-
-        res.status(200).json(new ApiResponse(200,updatedCustomer," Update customer successfaully."))
+        res.status(200).json(new ApiResponse(200,customer," Update customer successfaully."))
         
     }catch(error){
         throw new ApiError(400, "Error in update customer", error?.message)
+        return res.status(400).json(new ApiError(400, "something went wrong in update customer.", error?.message))
     }
 })
 
@@ -582,7 +667,19 @@ const getCustomerByID = asyncHandler( async (req, res) =>{
     try{
 
         const {id} = req.body
-        const customer = await Customer.find({'id':id},['password','activation_token']).execute();
+        if(!id){
+            return res.status(400).json(new ApiError(400,'customer id is requied.'))
+        }
+
+        const customer = await prisma.Customer.findUnique({
+            where:{id},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
 
         if(customer){
            return res.status(201).json(new ApiResponse(200, customer, " Fetch the customer information successfully. "))
@@ -603,10 +700,18 @@ const toggleStatus = asyncHandler( async (req, res) =>{
             return res.status(400).json(new ApiError(400, "All the field required"));
         }
 
-        const customerData = await Customer.find({'id':id}).execute();
+        const customerData = await prisma.Customer.findUnique({
+            where:{id},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
+        })
 
         const customer = await Customer.update({'id':id},{
-            is_active: !customerData.is_active
+            isActive: !customerData.isActive
         })
 
         if(!customer){
@@ -614,18 +719,17 @@ const toggleStatus = asyncHandler( async (req, res) =>{
         }
 
         const log={
-            actor_id: req.user.id,
-            actor_role: req.user.role,
+            actorId: req.user.id,
+            actorRole: req.user.role,
             description : `${req.user.first_name + " " + req.user.last_name} has ${customerData.is_active == 0 ? 'activated': 'deactivated'} the customer ${customerData.first_name +" "+ customerData.last_name}`,
-            log_status: "Successful"
+            logStatus: "Successful"
         }
-        await Log.create(log)   
-
+        await prisma.SystemLogLog.create({data:log})   
 
         res.status(200).json(new ApiResponse(200,customer,"Customer status changed successfully"))
 
     } catch (error) {
-        throw new ApiError(400," Error while changeing the status.")
+        res.status(400).json(new ApiError(400," Error while changeing the status."))
     }
 })
 
