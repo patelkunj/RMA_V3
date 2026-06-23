@@ -11,6 +11,7 @@ import {resetPasswordTempate} from "../templates/resetPassword.template.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
 
 import prisma from "../db/prisma.js";
+import { dmmfToRuntimeDataModel } from "@prisma/client/runtime/library"
 
 const registerUser = asyncHandler(async (req,res) => {
     try{
@@ -53,6 +54,12 @@ const registerUser = asyncHandler(async (req,res) => {
                     isActive:false,
                     isLocked:true, 
                     activationToken: activationToken
+                },
+                omit:{
+                    password:true,
+                    activationToken:true,
+                    passwordResetToken:true,
+                    passwordResetExpires:true
                 }
             })
 
@@ -143,7 +150,7 @@ const loginUser = asyncHandler( async (req,res)=>{
         const log={
             actorId: user.id,
             actorRole:user.role,
-            description : `${user.first_name + " " + user.last_name} is login. `
+            description : `${user.firstName + " " + user.lastName} is login. `
         }
 
         // password check
@@ -169,7 +176,9 @@ const loginUser = asyncHandler( async (req,res)=>{
             where:{id:user.id},
             omit:{
                 password:true,
-                activationToken:true
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
             }
         })
 
@@ -231,13 +240,13 @@ const logoutUser = asyncHandler(async(req,res)=>{
             logStatus: "Successful",
         }
 
-        await prisma.SystemLog.create({data:log})
-
         // remove cookies
         const options = {
             httpOnly : true,
             secure: true
         }
+
+        await prisma.SystemLog.create({data:log})
 
         return res
         .status(200)
@@ -270,7 +279,13 @@ const changeCurrentPassword = asyncHandler(async(req, res) =>{
         const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
         const changePassword = await prisma.User.update({
                 where: {id:user.id}, 
-                data: {password: encryptNewPassword}
+                data: {password: encryptNewPassword},
+                omit:{
+                    password:true,
+                    activationToken:true,
+                    passwordResetToken:true,
+                    passwordResetExpires:true
+                }
         })
         
         
@@ -332,7 +347,13 @@ const activeUser = asyncHandler(async(req, res)=>{
             if(timeDiffernce.hours < 24 &&  timeDiffernce.minutes < 1440 ){
                 updateUser = await User.update({
                     where:{id:user.id}, 
-                    data : data
+                    data : data,
+                    omit:{
+                    password:true,
+                    activationToken:true,
+                    passwordResetToken:true,
+                    passwordResetExpires:true
+                }
                 })
 
                 if(!updateUser){
@@ -371,7 +392,10 @@ const getUserDetail = asyncHandler( async (req, res) =>{
         const user = await prisma.User.findUnique({
             where:{email:email},
             omit:{
-                password
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
             }
         })
 
@@ -384,14 +408,20 @@ const getUserDetail = asyncHandler( async (req, res) =>{
 
 
         if(user){
-            const activationToken = generateRandomString(55);
+            const passwordResetToken = generateRandomString(55);
 
             // const updateUser = await User.update({'id':user.id}, data)
             const updateUser = await prisma.User.update({
                 where:{id:user.id},
                 data:{
-                    activationToken: activationToken,
+                    passwordResetToken: passwordResetToken,
                     isLocked: true
+                },
+                omit:{
+                    password:true,
+                    activationToken:true,
+                    passwordResetToken:true,
+                    passwordResetExpires:true
                 }
             })
 
@@ -402,7 +432,7 @@ const getUserDetail = asyncHandler( async (req, res) =>{
                     log.logStatus =  "Successful";
                     await prisma.SystemLog.create({data:log})
                     
-                    return res.status(201).json(new ApiResponse(200, createduser, " email send to user for reset password"))
+                    return res.status(201).json(new ApiResponse(200, updateUser, " email send to user for reset password"))
                 }
 
                 log.logStatus =  "Unsuccessful";
@@ -447,8 +477,15 @@ const forgetPassword = asyncHandler( async (req, res) =>{
             const changePassword = await prisma.User.update({
                 where:{id:user.id},
                 data:{
+                    isLocked:false,
                     password:encryptNewPassword,
                     activationToken:null
+                },
+                omit:{
+                    password:true,
+                    activationToken:true,
+                    passwordResetToken:true,
+                    passwordResetExpires:true
                 }
             })
 
@@ -482,13 +519,15 @@ const listUser = asyncHandler( async (req, res) =>{
         const users = await prisma.User.findMany({
             omit:{
                 password:true,
-                activationToken:true
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
             }
         })
 
         //const users = await User.join("user_customers","user_customers.user_id = users.id").join("user_organizations", "user_organizations.user_id = users.id").find({},['password','activation_token']).execute();
         if(!users){
-            throw ApiError(404, "No User Found")
+            return res.status(400).json(new ApiError(404, "No User Found"))
         }
         
         res.status(200).json(new ApiResponse(200,users, "List of all users"))
@@ -509,7 +548,9 @@ const getUserById = asyncHandler( async (req, res) =>{
             where:{id:id},
             omit:{
                 password:true,
-                activationToken:true
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
             }
         })
 
@@ -555,7 +596,9 @@ const updateUser = asyncHandler( async (req, res) =>{
             },
             omit:{
                 password:true,
-                activationToken: true
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
             }
         })
 
@@ -628,7 +671,13 @@ const toggleStatus = asyncHandler( async (req, res) =>{
 
         const user = await prisma.User.update({
             where:{id:id},
-            data:{isActive:!userData.is_active}
+            data:{isActive:!userData.is_active},
+            omit:{
+                password:true,
+                activationToken:true,
+                passwordResetToken:true,
+                passwordResetExpires:true
+            }
         })
 
 
