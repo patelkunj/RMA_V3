@@ -169,7 +169,7 @@ model Customer {
   email                String
   password             String
   contactPersonName    String? // Fixed: was contactPerson_name (mixed case)
-  contactNo            String?
+  contactPersonEmail    String?
   mobile               String?
   role                 String       @default("Customer")
   returnAddress        String?
@@ -183,7 +183,7 @@ model Customer {
   isActive             Boolean      @default(false)
   isLocked             Boolean      @default(false)
   creditLimit          Decimal?     @db.Decimal(12, 2)
-  paymentTerms         Int?
+  paymentTerms         Int?         @default(0)
   activationToken      String?
   lastLoginAt          DateTime?
   passwordResetToken   String?
