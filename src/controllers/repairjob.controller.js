@@ -83,7 +83,6 @@
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
-import { prisma } from "../lib/prisma.js"
 import moment from "moment"
 import { Email } from "../utils/Email.js"
 import { signupEmailTempate } from "../templates/signup.templates.js"
@@ -93,7 +92,6 @@ import path from 'path';
 import { overduedays, generateRandomString } from "../utils/common.js"
 import { moveFile } from "../utils/fileUpload.js"
 import prisma from "../db/prisma.js"
-
 
 
 const __filename = fileURLToPath(import.meta.url);

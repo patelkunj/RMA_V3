@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verfiyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
 import { 
         list, 
@@ -11,9 +11,9 @@ import {
 const router = Router()
 
 //Authorised Routes
-router.route("/list").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),list)
-router.route("/add").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),addRepairCost)
-router.route("/update").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),updateRepairCost)
+router.route("/list").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]),list)
+router.route("/add").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]),addRepairCost)
+router.route("/update").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]),updateRepairCost)
 
 
 

@@ -16,9 +16,9 @@ import {generateRandomString, diffTwoDateTime} from "../utils/common.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
 
 import prisma from "../db/prisma.js"
-import { Prisma } from "@prisma/client"
-import { dmmfToRuntimeDataModel } from "@prisma/client/runtime/library"
-import { where } from "sequelize"
+// import { Prisma } from "@prisma/client"
+// import { dmmfToRuntimeDataModel } from "@prisma/client/runtime/library"
+// import { where } from "sequelize"
 
 // const Customer = new CustomerModel();
 // const Session = new SessionModel();

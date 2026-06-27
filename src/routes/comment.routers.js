@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verfiyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { 
@@ -12,9 +12,9 @@ import {
 
 const router =  Router()
 
-router.route('/list').post(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),listComment)
-router.route('/create').post(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),upload.any(),insertComment)
-router.route('/update').put(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),updateComment)
+router.route('/list').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),listComment)
+router.route('/create').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),upload.any(),insertComment)
+router.route('/update').put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),updateComment)
 
 
 export default router

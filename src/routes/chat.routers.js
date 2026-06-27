@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verfiyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import {
@@ -13,10 +13,10 @@ import {
 
 const router =  Router()
 
-router.route('/list').post(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),listChat)
-router.route('/create').post(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),upload.any(),insertChat)
-router.route('/toggle-read').put(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),toggleRead)
-router.route('/unread-count').post(verfiyJWT,authorizeRoles(["Admin","Customer","SuperAdmin"]),unreadCount) 
+router.route('/list').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),listChat)
+router.route('/create').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),upload.any(),insertChat)
+router.route('/toggle-read').put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),toggleRead)
+router.route('/unread-count').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),unreadCount) 
 
 
 export default router

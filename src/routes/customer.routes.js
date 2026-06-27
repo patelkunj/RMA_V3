@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verfiyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
 import {registerCustomer, 
         loginCustomer, 
@@ -25,14 +25,14 @@ router.route("/forgetPassword/:token").post(forgetPassword)
 router.route("/customerinfo").post(getCustomerInfo)
 
 //Secure routes
-router.route("/logout").post(verfiyJWT,authorizeRoles(["Customer"]),logoutCustomer)
-router.route("/change_password").post(verfiyJWT,authorizeRoles(["Customer"]),changeCurrentPassword)
+router.route("/logout").post(verifyJWT,authorizeRoles(["CUSTOMER"]),logoutCustomer)
+router.route("/change_password").post(verifyJWT,authorizeRoles(["CUSTOMER"]),changeCurrentPassword)
 
 // Authorized routes
-router.route("/register").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),registerCustomer)
-router.route("/search").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),searchCustomer)
-router.route("/list").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]), listCustomer)
-router.route("/update").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),updateCustomer)
-router.route("/find").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),getCustomerByID)
-router.route("/activate_deactivate").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),toggleStatus)
+router.route("/register").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),registerCustomer)
+router.route("/search").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchCustomer)
+router.route("/list").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]), listCustomer)
+router.route("/update").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateCustomer)
+router.route("/find").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),getCustomerByID)
+router.route("/activate_deactivate").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),toggleStatus)
 export default router

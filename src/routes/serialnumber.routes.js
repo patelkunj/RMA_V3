@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { verfiyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
 import{ 
     insertSerialNumber,
@@ -13,10 +13,10 @@ const router = Router()
 
 // verfiyJWT is middleware
 //Secure routes
-router.route("/").get(verfiyJWT, authorizeRoles(["Admin","Super Admin"]),listSerialNumber);
-router.route("/").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),updateSerialNumber);
-router.route("/").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),insertSerialNumber);
-router.route("/upload_serialnumber").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),uploadSerialNumber);
+router.route("/").get(verifyJWT, authorizeRoles(["ADMIN","SUPER_ADMIN"]),listSerialNumber);
+router.route("/").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateSerialNumber);
+router.route("/").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),insertSerialNumber);
+router.route("/upload_serialnumber").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),uploadSerialNumber);
 
 
 export default router;

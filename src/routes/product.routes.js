@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { verfiyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
 import { 
     listAllProduct,
-    searchProudct,
+    searchProduct,
     insertProduct,
     updateProduct,
     listProducts
@@ -14,10 +14,10 @@ const router = Router()
 
 //Secure routes
 // verfiyJWT is middleware
-router.route("/").get(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),listProducts)
-router.route("/search").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),searchProudct)
-router.route("/").post(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),insertProduct)
-router.route("/").put(verfiyJWT,authorizeRoles(["Admin","Super Admin"]),updateProduct)
-//router.route("/product").post(verfiyJWT,authorizeRoles(["Admin","Super Admin","Customer"]),listProducts)
+router.route("/").get(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),listProducts)
+router.route("/search").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchProduct)
+router.route("/").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),insertProduct)
+router.route("/").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateProduct)
+//router.route("/product").post(verifyJWT,authorizeRoles(["Admin","Super Admin","Customer"]),listProducts)
 
 export default router

@@ -171,7 +171,7 @@ model Customer {
   contactPersonName    String? // Fixed: was contactPerson_name (mixed case)
   contactPersonEmail    String?
   mobile               String?
-  role                 String       @default("Customer")
+  role                 String       @default("CUSTOMER")
   returnAddress        String?
   warrantyMonths       Int          @default(0)
   warrantyTypes        String?
