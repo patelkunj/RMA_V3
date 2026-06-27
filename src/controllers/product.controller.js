@@ -1,134 +1,404 @@
-import {ApiError} from "../utils/ApiError.js"
-import {ApiResponse} from "../utils/ApiResponse.js"
-import {asyncHandler} from "../utils/asyncHandler.js"
-import { ProductModel } from "../models/product.model.js"
-import moment from "moment"
+import prisma from "../db/prisma.js";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
-
-const Product = new ProductModel()
-
-
-const insertProduct = asyncHandler(async(req,res)=>{
+const insertProduct = asyncHandler(async (req, res) => {
     try {
-        const {sku,product_name,model,color,branch,status} = req.body
 
-        if([sku,product_name,branch,].some((field)=> field?.trim() === "")){
-            throw new ApiError(400, " Data is required. ")
-        }
-
-        const product = await Product.create({
+        const {
             sku,
             product_name,
             model,
             color,
-            branch,
-            status: "Active",
-            created_date : moment().format("YYYY-MM-DD HH:mm:ss"),
-            updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
-        })
-    
-        if(!product){
-            throw new ApiError(400,"Error while inserting the product")
+            organizationId
+        } = req.body;
+
+        if (
+            [sku, product_name, organizationId]
+                .some(field => field?.toString().trim() === "")
+        ) {
+            throw new ApiError(400, "Required data is missing.");
         }
-        res.status(200).json(new ApiResponse(200, product," Product inserted successfully."))
+
+        const existingProduct = await prisma.product.findFirst({
+            where: {
+                organizationId: Number(organizationId),
+                sku: sku.trim()
+            }
+        });
+
+        if (existingProduct) {
+            throw new ApiError(
+                400,
+                "Product with this SKU already exists."
+            );
+        }
+
+        const product = await prisma.product.create({
+            data: {
+                organizationId: Number(organizationId),
+                sku: sku.trim(),
+                name: product_name.trim(),
+                model: model?.trim() || null,
+                color: color?.trim() || null
+            }
+        });
+
+        return res.status(201).json(
+            new ApiResponse(
+                201,
+                product,
+                "Product inserted successfully."
+            )
+        );
+
     } catch (error) {
-        throw new ApiError(400," Error while inserting product.")
+        throw new ApiError(
+            400,
+            `Error while inserting product. ${error?.message}`
+        );
     }
-})
+});
 
-const updateProduct = asyncHandler(async(req,res)=>{
+const updateProduct = asyncHandler(async (req, res) => {
     try {
-        const {id,sku,product_name,model,color,branch,status} = req.body
 
-        if([id,sku,product_name,model,color,branch,status].some((field)=> field?.trim() === "")){
-            throw new ApiError(400, " Data is required. ")
-        }
-
-        const product = await Product.update({'id':id},{
+        const {
+            id,
             sku,
             product_name,
             model,
             color,
-            branch,
-            status,
-            updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
-        })
-    
-        if(!product){
-            throw new ApiError(400,"Error while updating the product")
-        }
-        res.status(200).json(new ApiResponse(200, product," Product updated successfully."))
-    } catch (error) {
-        throw new ApiError(400," Error while updateing product.")
-    }
-})
+            organizationId
+        } = req.body;
 
-const listAllProduct = asyncHandler(async(req,res) => {
-    try {
-        
-        // Get page and limit from query params, default to page 1, limit 10
-        let page = parseInt(req.body.page) || 1;
-        let limit = parseInt(req.body.limit) || 10;
-        let offset = (page - 1) * limit;
-
-        // call DB  
-        const data = await Product.findAll(limit,offset)
-            
-        return res.status(200).json(new ApiResponse(200, data, "Proudct data"))
-
-    } catch (error) {
-        throw new ApiError(200, "Error while listing Product ", error?.message)
-    }
-})
-
-const listProducts = asyncHandler(async(req,res) => {
-    try {
-        
-        const data = await Product.find().execute()
-        if(!data){
-            return res.status(400).json(new ApiError(404," no data found"))
-        }    
-        return res.status(200).json(new ApiResponse(200, data, "Proudct data"))
-
-    } catch (error) {
-        throw new ApiError(200, "Error while listing Product ", error?.message)
-    }
-})
-
-const searchProudct = asyncHandler(async(req,res)=>{
-    try {
-
-        const is_active = req.body.is_active || 1;
-        const keyword = req.body.keyword;
-
-         // Validation of data
-         if ([is_active, keyword].some(field => !field?.trim())) {
-            throw new ApiError(400, "All fields are required");
+        if (
+            [id, sku, product_name, organizationId]
+                .some(field => field?.toString().trim() === "")
+        ) {
+            throw new ApiError(400, "Required data is missing.");
         }
 
-        let status=''
-        if(is_active == 1 ) status =" and status='public'";
-        if(is_active == 0 ) status =" and status='inactive'";
+        const existingProduct =
+            await prisma.product.findUnique({
+                where: {
+                    id: Number(id)
+                }
+            });
 
-        const product = await Product.findByMultipleField(keyword, status )
-
-        if(!product){
-            throw new ApiError(400, "No Product Found. ")
+        if (!existingProduct) {
+            throw new ApiError(404, "Product not found.");
         }
 
-        return res.status(200).json(new ApiResponse(200,product, "Proudct List"))
+        const product = await prisma.product.update({
+            where: {
+                id: Number(id)
+            },
+            data: {
+                organizationId: Number(organizationId),
+                sku: sku.trim(),
+                name: product_name.trim(),
+                model: model?.trim() || null,
+                color: color?.trim() || null
+            }
+        });
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                product,
+                "Product updated successfully."
+            )
+        );
 
     } catch (error) {
-        throw new ApiError(400,' Error in seach product')
+        throw new ApiError(
+            400,
+            `Error while updating product. ${error?.message}`
+        );
     }
-})
+});
 
-// TODO: Sync product with Cin7 Product Database.
+
+const listProducts = asyncHandler(async (req, res) => {
+    try {
+
+        const products = await prisma.product.findMany({
+            orderBy: {
+                name: "asc"
+            }
+        });
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                products,
+                "Product list"
+            )
+        );
+
+    } catch (error) {
+
+        throw new ApiError(
+            400,
+            `Error while listing products. ${error?.message}`
+        );
+    }
+});
+
+//Pagination version
+const listAllProduct = asyncHandler(async (req, res) => {
+    try {
+
+        const page = Number(req.body.page) || 1;
+        const limit = Number(req.body.limit) || 10;
+
+        const skip = (page - 1) * limit;
+
+        const [products, total] = await Promise.all([
+
+            prisma.product.findMany({
+                skip,
+                take: limit,
+                orderBy: {
+                    id: "desc"
+                }
+            }),
+
+            prisma.product.count()
+
+        ]);
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {
+                    products,
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit)
+                },
+                "Product data"
+            )
+        );
+
+    } catch (error) {
+
+        throw new ApiError(
+            400,
+            `Error while listing products. ${error?.message}`
+        );
+    }
+});
+
+const searchProduct = asyncHandler(async (req, res) => {
+    try {
+
+        const { keyword } = req.body;
+
+        if (!keyword?.trim()) {
+            throw new ApiError(
+                400,
+                "Keyword is required."
+            );
+        }
+
+        const products = await prisma.product.findMany({
+            where: {
+                organizationId: req.user.organizationId,
+                OR: [
+                    {
+                        sku: {
+                            contains: keyword,
+                            mode: "insensitive"
+                        }
+                    },
+                    {
+                        name: {
+                            contains: keyword,
+                            mode: "insensitive"
+                        }
+                    },
+                    {
+                        model: {
+                            contains: keyword,
+                            mode: "insensitive"
+                        }
+                    },
+                    {
+                        color: {
+                            contains: keyword,
+                            mode: "insensitive"
+                        }
+                    }
+                ]
+            },
+            orderBy: {
+                name: "asc"
+            }
+        });
+
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                products,
+                "Product list"
+            )
+        );
+
+    } catch (error) {
+
+        throw new ApiError(
+            400,
+            `Error while searching products. ${error?.message}`
+        );
+    }
+});
+
+
 
 export{
     listAllProduct,
     listProducts,
     insertProduct,
     updateProduct,
-    searchProudct
+    searchProduct
 }
+
+
+// import {ApiError} from "../utils/ApiError.js"
+// import {ApiResponse} from "../utils/ApiResponse.js"
+// import {asyncHandler} from "../utils/asyncHandler.js"
+// import { ProductModel } from "../models/product.model.js"
+// import moment from "moment"
+
+
+// const Product = new ProductModel()
+
+
+// const insertProduct = asyncHandler(async(req,res)=>{
+//     try {
+//         const {sku,product_name,model,color,branch,status} = req.body
+
+//         if([sku,product_name,branch,].some((field)=> field?.trim() === "")){
+//             throw new ApiError(400, " Data is required. ")
+//         }
+
+//         const product = await Product.create({
+//             sku,
+//             product_name,
+//             model,
+//             color,
+//             branch,
+//             status: "Active",
+//             created_date : moment().format("YYYY-MM-DD HH:mm:ss"),
+//             updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
+//         })
+    
+//         if(!product){
+//             throw new ApiError(400,"Error while inserting the product")
+//         }
+//         res.status(200).json(new ApiResponse(200, product," Product inserted successfully."))
+//     } catch (error) {
+//         throw new ApiError(400," Error while inserting product.")
+//     }
+// })
+
+// const updateProduct = asyncHandler(async(req,res)=>{
+//     try {
+//         const {id,sku,product_name,model,color,branch,status} = req.body
+
+//         if([id,sku,product_name,model,color,branch,status].some((field)=> field?.trim() === "")){
+//             throw new ApiError(400, " Data is required. ")
+//         }
+
+//         const product = await Product.update({'id':id},{
+//             sku,
+//             product_name,
+//             model,
+//             color,
+//             branch,
+//             status,
+//             updated_date : moment().format("YYYY-MM-DD HH:mm:ss")
+//         })
+    
+//         if(!product){
+//             throw new ApiError(400,"Error while updating the product")
+//         }
+//         res.status(200).json(new ApiResponse(200, product," Product updated successfully."))
+//     } catch (error) {
+//         throw new ApiError(400," Error while updateing product.")
+//     }
+// })
+
+// const listAllProduct = asyncHandler(async(req,res) => {
+//     try {
+        
+//         // Get page and limit from query params, default to page 1, limit 10
+//         let page = parseInt(req.body.page) || 1;
+//         let limit = parseInt(req.body.limit) || 10;
+//         let offset = (page - 1) * limit;
+
+//         // call DB  
+//         const data = await Product.findAll(limit,offset)
+            
+//         return res.status(200).json(new ApiResponse(200, data, "Proudct data"))
+
+//     } catch (error) {
+//         throw new ApiError(200, "Error while listing Product ", error?.message)
+//     }
+// })
+
+// const listProducts = asyncHandler(async(req,res) => {
+//     try {
+        
+//         const data = await Product.find().execute()
+//         if(!data){
+//             return res.status(400).json(new ApiError(404," no data found"))
+//         }    
+//         return res.status(200).json(new ApiResponse(200, data, "Proudct data"))
+
+//     } catch (error) {
+//         throw new ApiError(200, "Error while listing Product ", error?.message)
+//     }
+// })
+
+// const searchProudct = asyncHandler(async(req,res)=>{
+//     try {
+
+//         const is_active = req.body.is_active || 1;
+//         const keyword = req.body.keyword;
+
+//          // Validation of data
+//          if ([is_active, keyword].some(field => !field?.trim())) {
+//             throw new ApiError(400, "All fields are required");
+//         }
+
+//         let status=''
+//         if(is_active == 1 ) status =" and status='public'";
+//         if(is_active == 0 ) status =" and status='inactive'";
+
+//         const product = await Product.findByMultipleField(keyword, status )
+
+//         if(!product){
+//             throw new ApiError(400, "No Product Found. ")
+//         }
+
+//         return res.status(200).json(new ApiResponse(200,product, "Proudct List"))
+
+//     } catch (error) {
+//         throw new ApiError(400,' Error in seach product')
+//     }
+// })
+
+// TODO: Sync product with Cin7 Product Database.
+
+// export{
+//     listAllProduct,
+//     listProducts,
+//     insertProduct,
+//     updateProduct,
+//     searchProudct
+// }

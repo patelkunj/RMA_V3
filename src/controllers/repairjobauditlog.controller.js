@@ -1,19 +1,23 @@
 import { ApiResponse } from "../utils/ApiResponse";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
-import { RepairJobAuditLogModel } from "../models/repairjobauditlog.model.js";
-import moment from "moment"; 
-
-const RepairJobAuditLog = new RepairJobAuditLogModel();
-
+import prisma from "../db/prisma.js"
+import moment from "moment";
+ 
 const list = asyncHandler( async(req,res) => {
     try {
-         const {id} = req.body  
+        const {id} = req.body
         if(!id){
             return res.status(400).json(new ApiError(400," id is empty"))
-        }  
-        const listData = await RepairJobAuditLog.find({'id':id}).execute();
-        if(!listData){
+        }
+
+        // returning every audit-log entry for that job rather than a single row.
+        const listData = await prisma.repairJobAuditLog.findMany({
+            where: { repairJobId: Number(id) },
+            orderBy: { performedAt: 'desc' },
+        });
+ 
+        if(!listData || listData.length === 0){
             return res.status(400).json(new ApiError(400,"no data found."))
         }
         return res.status(200).json(new ApiResponse(200,"success",listData));
@@ -21,35 +25,93 @@ const list = asyncHandler( async(req,res) => {
         return res.status(500).json(new ApiError(500,error.message));
     }
 });
-
+ 
 const createLog = asyncHandler( async(req,res) => {
     try {
         const {
             repair_job_id,
             action_type,
-            description,
-            log_status
-        } = req.body;   
-
-        if([repair_job_id,action_type,description,log_status].some(field => !field?.trim())){
+            description
+        } = req.body;
+ 
+        if([repair_job_id,action_type,description].some(field => !field?.trim())){
             return res.status(400).json(new ApiError(400, "All fields are required"));
-        } 
-
-        const newLog = await RepairJobAuditLog.create({
-                repair_job_id,
-                action_type,
+        }
+ 
+        const newLog = await prisma.repairJobAuditLog.create({
+            data: {
+                repairJobId: Number(repair_job_id),
+                actionType: String(action_type).toUpperCase(), // mapped to AuditAction enum — must be one of CREATE, UPDATE, DELETE, STATUS_CHANGE, COMMENT, CONTACT, COST_CHANGE
                 description,
-                log_status
+                performedBy: Number(req.user?.id)
+            },
         });
-
+ 
         return res.status(201).json(new ApiResponse(201, "Log created successfully", newLog));
-        
+ 
     } catch (error) {
         return res.status(500).json(new ApiError(500, error.message));
     }
 });
-
+ 
 export {
     list,
     createLog
 }
+
+
+// import { ApiResponse } from "../utils/ApiResponse";
+// import { ApiError } from "../utils/ApiError";
+// import { asyncHandler } from "../utils/asyncHandler";
+// import { RepairJobAuditLogModel } from "../models/repairjobauditlog.model.js";
+// import moment from "moment"; 
+
+// const RepairJobAuditLog = new RepairJobAuditLogModel();
+
+// const list = asyncHandler( async(req,res) => {
+//     try {
+//          const {id} = req.body  
+//         if(!id){
+//             return res.status(400).json(new ApiError(400," id is empty"))
+//         }  
+//         const listData = await RepairJobAuditLog.find({'id':id}).execute();
+//         if(!listData){
+//             return res.status(400).json(new ApiError(400,"no data found."))
+//         }
+//         return res.status(200).json(new ApiResponse(200,"success",listData));
+//     } catch (error) {
+//         return res.status(500).json(new ApiError(500,error.message));
+//     }
+// });
+
+// const createLog = asyncHandler( async(req,res) => {
+//     try {
+//         const {
+//             repair_job_id,
+//             action_type,
+//             description,
+//             log_status
+//         } = req.body;   
+
+//         if([repair_job_id,action_type,description,log_status].some(field => !field?.trim())){
+//             return res.status(400).json(new ApiError(400, "All fields are required"));
+//         } 
+
+//         const newLog = await RepairJobAuditLog.create({
+//                 repair_job_id,
+//                 action_type,
+//                 description,
+//                 log_status
+//         });
+
+//         return res.status(201).json(new ApiResponse(201, "Log created successfully", newLog));
+        
+//     } catch (error) {
+//         return res.status(500).json(new ApiError(500, error.message));
+//     }
+// });
+
+// export {
+//     list,
+//     createLog
+// }

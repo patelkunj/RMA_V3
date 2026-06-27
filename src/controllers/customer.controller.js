@@ -194,7 +194,7 @@ const loginCustomer = asyncHandler( async (req, res) =>{
 
         // send cookies
         //const loggedInUser= await User.findById(user.id)
-        const loggedInCustomer = await Customer.find({id:customer.id},['password','activation_token']).execute();
+        //const loggedInCustomer = await Customer.find({id:customer.id},['password','activation_token']).execute();
         const loggedInCustomer = await prisma.Customer.findUnique({
             where:{id:customer.id},
             omit:{
