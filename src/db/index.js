@@ -11,10 +11,4 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
 })
 
-pool.connect((err,connection)=>{
-  if(err) throw err;
-  console.log("PG database connected successfully");
-  connection.release();
-})
-
 export default pool;

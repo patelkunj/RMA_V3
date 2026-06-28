@@ -2,14 +2,25 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser"
 import dotenv from 'dotenv';
+import { ApiError } from "./utils/ApiError.js";
 dotenv.config()
 
 const app = express();
 
 // used of middleware
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 app.use(cors({
-    origin:"http://localhost:5173",
-    credentials: true  
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new ApiError(403, "CORS origin is not allowed"));
+    },
+    credentials: true
 }));
 
 app.use(express.json({limit:"16kb"}))
@@ -36,6 +47,7 @@ import repairJobCostingRouter from "./routes/repairjobcost.routes.js"
 app.use("/api/v1/users",userRouter)
 app.use("/api/v1/customers", customerRouter)
 app.use("/api/v1/repairjobs", repairJobRouter)
+app.use("/api/v1/products",productRouter)
 app.use("/api/v1/proudcts",productRouter)
 app.use("/api/v1/serialnumbers",serialNumberRouter)
 app.use("/api/v1/organizations", organizationRouter)
@@ -45,6 +57,20 @@ app.use("/api/v1/repairjobcost",repairJobCostingRouter)
 // app.use("/api/v1/videos",videoRouter)
 // app.use("/api/v1/comments",commentRoute)
 // app.use("/api/v1/tweets",tweetRoute)
+
+app.use((err, req, res, next) => {
+    const statusCode = err?.statusCode || 500;
+    const message = statusCode === 500 && process.env.NODE_ENV === "production"
+        ? "Internal Server Error"
+        : err?.message || "Internal Server Error";
+
+    return res.status(statusCode).json({
+        success: false,
+        statusCode,
+        message,
+        errors: err?.errors || [],
+    });
+});
 
 
 export { app }

@@ -19,7 +19,7 @@ import {
 const router = Router()
 
 
-router.route("/add_multipal_repairjob").post(upload.any(),insertMultipalReapirJob)
+router.route("/add_multipal_repairjob").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),upload.any(),insertMultipalReapirJob)
 
 //Secure routes
 router.route("/list_repairjob").post(verifyJWT,listRepairJob)

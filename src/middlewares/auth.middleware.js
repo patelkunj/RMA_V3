@@ -36,7 +36,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
         }
 
         // Fall back to Customer
-        const customer = await prisma.customer.findUnique({
+        const customer = await prisma.customer.findFirst({
             where: {
                 id: decodedToken?.id,
                 email: decodedToken?.email,
@@ -44,7 +44,10 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
             select: {
                 id: true,
                 email: true,
-                companyName:true
+                companyName:true,
+                customerCode: true,
+                organizationId: true,
+                role: true,
             },
         });
 
@@ -87,7 +90,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
 //        //const User = new UserModel();
 //        //const user = await User.find({'id': decodeedToken?.id,'email':decodeedToken?.email}).execute();
 
-//        const user = await prisma.User.findUnique({
+//        const user = await prisma.user.findUnique({
 //          where:{id: decodeedToken?.id,email:decodeedToken?.email}
 //        })
    

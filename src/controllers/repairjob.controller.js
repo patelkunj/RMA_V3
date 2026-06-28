@@ -190,8 +190,8 @@ const insertRepairJob = asyncHandler(async (req, res) => {
         let job_id;
         if(req.customer){
             job_id = lastInsertId
-            ? `${req.customer?.store_code}-${String(lastInsertId.id).padStart(5, '0')}`
-            : `${req.customer?.store_code}-00001`;
+            ? `${req.customer?.customerCode}-${String(lastInsertId.id).padStart(5, '0')}`
+            : `${req.customer?.customerCode}-00001`;
         }else{
             job_id = lastInsertId
             ? `${store_code}-${String(Number(lastInsertId.id) + 1 ).padStart(5, '0')}`
@@ -269,7 +269,7 @@ const insertRepairJob = asyncHandler(async (req, res) => {
                     documentUrl: `/uploads/${createdRepairJob.id}/repair_job/${uploadfiles[j].toString()}`,
                     documentType: type === 'image' ? 'IMAGE' : 'OTHER', // mapped to DocumentType enum
                     uploadedBy: req.user?.id || req.customer?.id,
-                    uploadedRole: req.user?.role || req.customer?.role,
+                    uploadedRole: req.user?.role || req.customer?.role || "CUSTOMER",
                     fileHash: generateRandomString(15),
                 },
             })
@@ -279,7 +279,7 @@ const insertRepairJob = asyncHandler(async (req, res) => {
         const log = {
             actorId: req.customer?.id || req.user?.id ,
             actorRole: req.user?.role || "Customer", // NOTE: original had `req.user?.user_role` (no such field elsewhere) — using `req.user?.role` for consistency with the rest of the file
-            description: `${req.customer?.company_name || req.user?.first_name +' '+ req.user?.last_name} created the RA Job ${job_id}`,
+            description: `${req.customer?.companyName || `${req.user?.firstName} ${req.user?.lastName}`} created the RA Job ${job_id}`,
             logStatus: "Successful", // Assume success by default
         };
 
@@ -700,7 +700,7 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
 
         for(let i=0; i< length; i++){
 
-            job_id = await getLastInsertJob(req.customer?.store_code)
+            job_id = await getLastInsertJob(req.customer?.customerCode)
 
             let inputdata = (length==1) ? JSON.parse(Jobdata.data) : JSON.parse(Jobdata.data[i])
 

@@ -5,9 +5,14 @@ import { app } from "./src/app.js";
 dotenv.config({path: './.env'})
 
 pool.connect((err,connection)=>{
-  if(err) throw err;
-  app.listen(process.env.PORT || 3000,()=>{
-    console.log(`sever is running on port ${process.env.PORT}`);
+  if(err) {
+    console.error("PG database connection failed", err);
+    process.exit(1);
+  }
+
+  const port = process.env.PORT || 3000;
+  app.listen(port,()=>{
+    console.log(`server is running on port ${port}`);
   })
   console.log("PG database connected successfully");
   connection.release();
