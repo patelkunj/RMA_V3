@@ -13,11 +13,11 @@ import {listOrganization,
 const router = Router()
 
 //secure route
-router.route("/").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),creatOrganization)
+router.route("/").post(verifyJWT,authorizeRoles(["SUPER_ADMIN"]),creatOrganization)
 router.route("/").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateOrganization)
 router.route("/").get(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),listOrganization)
 router.route("/:id").get(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),getOrganizationDetail)
-router.route("/toggle").patch(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),toggleStatus)
+router.route("/toggle").patch(verifyJWT,authorizeRoles(["SUPER_ADMIN"]),toggleStatus)
 // router.route("/search").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchCompany)
 // router.route("/all").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),allCompany)
 

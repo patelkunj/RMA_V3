@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
+import { authRateLimit } from "../middlewares/rateLimit.middleware.js";
 import {loginUser,
         registerUser, 
         logoutUser, 
@@ -21,10 +22,10 @@ import {loginUser,
 const router = Router()
 
 
-router.route("/login").post(loginUser)
-router.route("/activeuser/:token").get(activeUser)
-router.route("/getUserDetail").post(getUserDetail)
-router.route("/forgetPassword/:token").post(forgetPassword)
+router.route("/login").post(authRateLimit,loginUser)
+router.route("/activeuser/:token").get(authRateLimit,activeUser)
+router.route("/getUserDetail").post(authRateLimit,getUserDetail)
+router.route("/forgetPassword/:token").post(authRateLimit,forgetPassword)
 
 //Secure routes
 router.route("/logout").post(verifyJWT,logoutUser)

@@ -1,3 +1,5 @@
+import { logger } from "./logger.js";
+
 const asyncHandler = (handler) => {
     return (req, res, next) => {
         try {
@@ -6,7 +8,7 @@ const asyncHandler = (handler) => {
             if (!res.headersSent) {
                 return next(error); // Only forward the error if no response was sent
             } else {
-                console.error("Unhandled error after response was sent:", error);
+                logger.error("Unhandled error after response was sent:", error);
             }
         }
     };

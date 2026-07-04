@@ -3,15 +3,27 @@ import cors from "cors";
 import cookieParser from "cookie-parser"
 import dotenv from 'dotenv';
 import { ApiError } from "./utils/ApiError.js";
+import { securityHeaders } from "./middlewares/security.middleware.js";
+import { apiRateLimit } from "./middlewares/rateLimit.middleware.js";
+import { activityLogger } from "./middlewares/activityLogger.middleware.js";
+import { logger } from "./utils/logger.js";
 dotenv.config()
 
 const app = express();
+app.disable("x-powered-by");
+
+if (process.env.TRUST_PROXY === "true") {
+    app.set("trust proxy", 1);
+}
 
 // used of middleware
 const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+app.use(securityHeaders)
+app.use(activityLogger)
 
 app.use(cors({
     origin(origin, callback) {
@@ -23,9 +35,14 @@ app.use(cors({
     credentials: true
 }));
 
+app.use(apiRateLimit)
 app.use(express.json({limit:"16kb"}))
 app.use(express.urlencoded({extended:true, limit:"16kb"}))
-app.use(express.static("public"))
+app.use(express.static("public", {
+    dotfiles: "deny",
+    index: false,
+    maxAge: process.env.NODE_ENV === "production" ? "1d" : 0,
+}))
 app.use(cookieParser()) // for access the Cookies value
 
 
@@ -58,11 +75,23 @@ app.use("/api/v1/repairjobcost",repairJobCostingRouter)
 // app.use("/api/v1/comments",commentRoute)
 // app.use("/api/v1/tweets",tweetRoute)
 
+app.use((req, res) => {
+    return res.status(404).json(new ApiError(404, "Route not found"));
+});
+
 app.use((err, req, res, next) => {
     const statusCode = err?.statusCode || 500;
     const message = statusCode === 500 && process.env.NODE_ENV === "production"
         ? "Internal Server Error"
         : err?.message || "Internal Server Error";
+
+    logger.error("request_error", {
+        requestId: req.id,
+        method: req.method,
+        path: req.originalUrl || req.url,
+        statusCode,
+        error: err,
+    });
 
     return res.status(statusCode).json({
         success: false,

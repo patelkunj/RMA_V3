@@ -2,22 +2,48 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 //import { OrganizationModel } from "../models/organization.model.js";
-import moment from "moment";
 import prisma from "../db/prisma.js";
+import {
+    ensureUserCanAccessOrganization,
+    getAssignedOrganizationIds,
+    isSuperAdmin,
+} from "../utils/accessControl.js";
 
 
 // add pagination
 const listOrganization = asyncHandler(async (req, res) => {
 
     try {
-        const org = await prisma.organization.findMany();
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+        const skip = (page - 1) * limit;
 
-        if(!org){
-            res.status(200).json(new ApiResponse(200, null, " No organization found."))
-        }
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
+        const where = isSuperAdmin(req.user)
+            ? {}
+            : { id: { in: organizationIds } };
+
+        const [org, total] = await Promise.all([
+            prisma.organization.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { name: "asc" },
+            }),
+            prisma.organization.count({ where }),
+        ]);
 
         return res.status(200).json(
-            new ApiResponse(200, org, "List of all organizations")
+            new ApiResponse(200, {
+                organizations: org,
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            }, "List of all organizations")
         );
 
     } catch (error) {
@@ -66,6 +92,8 @@ const updateOrganization = asyncHandler(async (req, res) => {
             throw new ApiError(400, "ID is required");
         }
 
+        await ensureUserCanAccessOrganization(req.user, id);
+
         const org = await prisma.organization.update({
             where: { id: Number(id) },
             data: {
@@ -101,6 +129,9 @@ const toggleStatus = asyncHandler(async (req, res) => {
             where:{id:Number(id)}
         })
 
+        if(!orgData){
+            return res.status(404).json(new ApiError(404, "Organization not found"));
+        }
 
         const org = await prisma.organization.update({
             where:{id:Number(id)},
@@ -122,17 +153,19 @@ const getOrganizationDetail = asyncHandler(async (req, res)=> {
         const {id} = req.params;
 
         if(!id){
-            res.status(400).json(new ApiError(400, " organization data not found"))
+            return res.status(400).json(new ApiError(400, " organization data not found"))
         }
+
+        await ensureUserCanAccessOrganization(req.user, id);
 
         const orgData = await prisma.organization.findUnique({
             where:{id:Number(id)}
         })
 
         if(!orgData){
-            res.status(200).json(new ApiResponse(200, null, " Organization detail not found."))
+            return res.status(200).json(new ApiResponse(200, null, " Organization detail not found."))
         }
-        res.status(200).json(new ApiResponse(200, orgData, "Organization data found."));
+        return res.status(200).json(new ApiResponse(200, orgData, "Organization data found."));
 
     } catch (error) {
         res.status(400).json(new ApiError(400, "Error while getting detail of organization. ", error?.message ))

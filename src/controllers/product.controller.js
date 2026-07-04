@@ -2,6 +2,11 @@ import prisma from "../db/prisma.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+    ensureUserCanAccessOrganization,
+    getAssignedOrganizationIds,
+    isSuperAdmin,
+} from "../utils/accessControl.js";
 
 const insertProduct = asyncHandler(async (req, res) => {
     try {
@@ -20,6 +25,8 @@ const insertProduct = asyncHandler(async (req, res) => {
         ) {
             throw new ApiError(400, "Required data is missing.");
         }
+
+        await ensureUserCanAccessOrganization(req.user, organizationId);
 
         const existingProduct = await prisma.product.findFirst({
             where: {
@@ -80,6 +87,8 @@ const updateProduct = asyncHandler(async (req, res) => {
             throw new ApiError(400, "Required data is missing.");
         }
 
+        await ensureUserCanAccessOrganization(req.user, organizationId);
+
         const existingProduct =
             await prisma.product.findUnique({
                 where: {
@@ -90,6 +99,8 @@ const updateProduct = asyncHandler(async (req, res) => {
         if (!existingProduct) {
             throw new ApiError(404, "Product not found.");
         }
+
+        await ensureUserCanAccessOrganization(req.user, existingProduct.organizationId);
 
         const product = await prisma.product.update({
             where: {
@@ -123,17 +134,40 @@ const updateProduct = asyncHandler(async (req, res) => {
 
 const listProducts = asyncHandler(async (req, res) => {
     try {
+        const page = Math.max(Number(req.query.page || req.body?.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.query.limit || req.body?.limit) || 50, 1), 100);
+        const skip = (page - 1) * limit;
 
-        const products = await prisma.product.findMany({
-            orderBy: {
-                name: "asc"
-            }
-        });
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
+        const where = isSuperAdmin(req.user)
+            ? {}
+            : { organizationId: { in: organizationIds } };
+
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: {
+                    name: "asc"
+                }
+            }),
+            prisma.product.count({ where }),
+        ]);
 
         return res.status(200).json(
             new ApiResponse(
                 200,
-                products,
+                {
+                    products,
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                },
                 "Product list"
             )
         );
@@ -205,9 +239,23 @@ const searchProduct = asyncHandler(async (req, res) => {
             );
         }
 
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
+        if (!isSuperAdmin(req.user) && organizationIds.length === 0) {
+            return res.status(200).json(
+                new ApiResponse(
+                    200,
+                    [],
+                    "Product list"
+                )
+            );
+        }
+
         const products = await prisma.product.findMany({
             where: {
-                organizationId: req.user.organizationId,
+                ...(isSuperAdmin(req.user) ? {} : { organizationId: { in: organizationIds } }),
                 OR: [
                     {
                         sku: {

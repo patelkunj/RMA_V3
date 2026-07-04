@@ -8,6 +8,13 @@ import {signupEmailTempate} from "../templates/signup.templates.js"
 import {resetPasswordTempate} from "../templates/resetPassword.template.js"
 import {generateRandomString, diffTwoDateTime} from "../utils/common.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
+import {
+    ensureUserCanAccessOrganization,
+    getAssignedOrganizationIds,
+    isSuperAdmin,
+} from "../utils/accessControl.js";
+import { assertStrongPassword, assertValidEmail, normalizeEmail } from "../utils/validation.js";
+import { logger } from "../utils/logger.js";
 
 import prisma from "../db/prisma.js"
 // import { Prisma } from "@prisma/client"
@@ -77,11 +84,16 @@ const registerCustomer = asyncHandler(async (req,res) => {
             if([organizationId, companyName,email,contactPersonName,contactPersonEmail,returnAddress,warrantyMonths, warrantyType, doaWarrantyDays, doaWarrantyType,warrantyRemarks,salesPerson].some((field) => String(field ?? "").trim() === "")){
                 return res.status(400).json(new ApiError(400, "All field are required"))
             }
+            const normalizedEmail = normalizeEmail(email);
+            assertValidEmail(normalizedEmail);
+            assertValidEmail(contactPersonEmail);
+
+            await ensureUserCanAccessOrganization(req.user, organizationId);
 
             const existingCustomer = await prisma.customer.findFirst({
                 where:{
                     organizationId: Number(organizationId),
-                    OR: [{ companyName }, { email }],
+                    OR: [{ companyName }, { email: normalizedEmail }],
                 }
             })
 
@@ -111,7 +123,7 @@ const registerCustomer = asyncHandler(async (req,res) => {
                 data:{
                     companyName,
                     customerCode:Store_code,
-                    email,
+                    email: normalizedEmail,
                     password:encodepassword,
                     contactPersonName,
                     contactPersonEmail,
@@ -196,10 +208,17 @@ const loginCustomer = asyncHandler( async (req, res) =>{
         // check user in db
         //const customer = await Customer.findByField("email ='" + email+"'")
         //const customer = await Customer.find({'email':email}).execute();
-        const customer = await prisma.customer.findFirst({ where:{ email }})
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
+
+        const customer = await prisma.customer.findFirst({ where:{ email: normalizedEmail }})
 
         if(!customer){
             return res.status(400).json(new ApiError(400,"please enter correct email address."))
+        }
+
+        if(!customer.isActive || customer.isLocked){
+            return res.status(423).json(new ApiError(423, "Customer account is not active."))
         }
 
         const log={
@@ -256,7 +275,7 @@ const loginCustomer = asyncHandler( async (req, res) =>{
             )
         )
     }catch(error){
-        console.log(" Customer Controller :: Login Customer :: error ", error?.message)
+        logger.error("Customer login failed", error)
         return res.status(400).json(new ApiError(400, `something went wrong in login the user`, error?.message))
     }
 
@@ -294,7 +313,7 @@ const logoutCustomer = asyncHandler( async (req, res) =>{
         )
 
     }catch(error){
-        console.log("Customer COntroller :: Logout :: error ", error?.message)
+        logger.error("Customer logout failed", error)
         return res.status(400).json(new ApiError(400, "something went wrong in logout the customer", error?.message))
     }
 
@@ -308,6 +327,7 @@ const changeCurrentPassword = asyncHandler( async (req, res) =>{
         if(!oldPassword || !newPassword){
             return res.status(400).json(new ApiError(400, "passwords are required"))
         }
+        assertStrongPassword(newPassword);
 
         const customer = await prisma.customer.findUnique({
             where:{id:req.customer?.id}
@@ -345,7 +365,7 @@ const changeCurrentPassword = asyncHandler( async (req, res) =>{
         .status(200)
         .json(new ApiResponse(200, changepassword , "Password Changed Successfully"))
     }catch(error){
-        console.log("Customer Controller :: Changerpassword :: error", error?.message)
+        logger.error("Customer password change failed", error)
         return res.status(400).json(new ApiError(400, "something went wrong in change password for customer", error?.message))
     }
 })
@@ -408,7 +428,7 @@ const activeCustomer = asyncHandler( async (req, res) =>{
         }
 
     }catch(error){
-        console.log("customer Controller :: Active customer :: error ", error?.message)
+        logger.error("Customer activation failed", error)
         return res.status(400).json(new ApiError(400, "something went wrong in active customer", error?.message))
     }
 
@@ -422,11 +442,20 @@ const getCustomerInfo = asyncHandler( async (req, res) =>{
         if(!email){
             return res.status(400).json(new ApiError(400," email is required."))
         }
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
 
         //const customer = await Customer.findByField("email='"+email+"'")
         //const customer = await Customer.find({'email':email},['password','activation_token'])
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
         const customer = await prisma.customer.findFirst({
-            where:{email},
+            where:{
+                email: normalizedEmail,
+                ...(isSuperAdmin(req.user) ? {} : { organizationId: { in: organizationIds } }),
+            },
             select: publicCustomerSelect,
         })
 
@@ -436,7 +465,7 @@ const getCustomerInfo = asyncHandler( async (req, res) =>{
             return res.status(404).json(new ApiError(404," Issue to fetch customer data"))
         }
     }catch(error){
-        console.log(" Customer Controller :: getCustomerDetail :: error ", error?.message)
+        logger.error("Customer info lookup failed", error)
         return res.status(400).json(new ApiError(400, "something went wrong in getting customer info.", error?.message))
     }
 })
@@ -449,11 +478,13 @@ const getCustomerDetail = asyncHandler( async (req, res) =>{
         if(!email){
             return res.status(400).json(new ApiError(400," email is required."))
         }
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
 
         //const customer = await Customer.findByField("email='"+email+"'")
         //const customer = await Customer.find({'email':email}).execute();
         const customer = await prisma.customer.findFirst({
-            where:{email},
+            where:{email: normalizedEmail},
             select: publicCustomerSelect,
         })
 
@@ -483,11 +514,10 @@ const getCustomerDetail = asyncHandler( async (req, res) =>{
             }else{
                 throw new ApiError(400," Error while storeing token.") 
             }
-        }else{
-            return res.status(404).json(new ApiError(404," email address is not found. "))
         }
+        return res.status(200).json(new ApiResponse(200, null, "If the email exists, a reset link will be sent."))
     }catch(error){
-        console.log(" Customer Controller :: getCustomerDetail :: error ", error?.message)
+        logger.error("Customer password reset request failed", error)
         return res.status(400).json(new ApiError(400, "something went wrong in getting customer detail.", error?.message))
     }
 })
@@ -498,9 +528,10 @@ const forgetPassword = asyncHandler( async (req, res) =>{
             const {token} = req.params
             const {newPassword} = req.body
 
-            if((!token) && (!newPassword)){
-                return res.status(500).json(new ApiError(400, " password is required."))
+            if((!token) || (!newPassword)){
+                return res.status(400).json(new ApiError(400, " password is required."))
             }
+            assertStrongPassword(newPassword);
  
             //const customer = await Customer.findByField(" activation_token ='" + token+"'") 
             //const customer = await Customer.find({'activation_token':token}).execute(); 
@@ -518,7 +549,7 @@ const forgetPassword = asyncHandler( async (req, res) =>{
                 description : `${customer.companyName} password has been changed.`,
             }
 
-            if(customer.passwordResetToken == token && (!customer.passwordResetExpires || customer.passwordResetExpires > new Date())){
+            if(customer.passwordResetToken == token && customer.passwordResetExpires && customer.passwordResetExpires > new Date()){
                 const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
                 const changePassword = await prisma.customer.update({
                     where: {id:customer.id},
@@ -547,7 +578,7 @@ const forgetPassword = asyncHandler( async (req, res) =>{
                 throw new ApiError(400, "Toekn is not recognise")   
             }
     }catch(error){
-        console.log('Customer Controller :: forgetPassword :: error ', error?.message )
+        logger.error('Customer forgot password failed', error)
         return res.status(400).json(new ApiError(400, "something went wrong in forgot customer password.", error?.message))
     }
 
@@ -555,15 +586,37 @@ const forgetPassword = asyncHandler( async (req, res) =>{
 
 const listCustomer = asyncHandler( async (req, res) =>{
     try{
+        const page = Math.max(Number(req.query.page || req.body?.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.query.limit || req.body?.limit) || 50, 1), 100);
+        const skip = (page - 1) * limit;
+
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
+        const where = isSuperAdmin(req.user)
+            ? {}
+            : { organizationId: { in: organizationIds } };
 
         //const customer = await Customer.find({}, ['password','activation_token']).execute();
-        const customer = await prisma.customer.findMany({
-            select: publicCustomerSelect,
-        })
-        if(!customer){
-            return res.status(400).json(new ApiError(400, "No customer found."))
-        }   
-        res.status(200).json(new ApiResponse(200,customer," Customer list."))
+        const [customers, total] = await Promise.all([
+            prisma.customer.findMany({
+                where,
+                skip,
+                take: limit,
+                select: publicCustomerSelect,
+                orderBy: { companyName: "asc" },
+            }),
+            prisma.customer.count({ where }),
+        ]);
+
+        return res.status(200).json(new ApiResponse(200,{
+            customers,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        }," Customer list."))
 
     }catch(error){
         throw new ApiError(400, "Error in listing customer", error?.message)
@@ -593,12 +646,26 @@ const updateCustomer = asyncHandler( async (req, res) =>{
         if([companyName,email,contactPersonName,contactPersonEmail,returnAddress,warrantyMonths, warrantyType, doaArrantyDays,doaWarrantyType,warrantyRemarks,salesPerson].some((field) => field?.trim() === "")){
             throw new ApiError(400, "All field are required")
         }
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
+        assertValidEmail(contactPersonEmail);
+
+        const existingCustomer = await prisma.customer.findUnique({
+            where: { id: Number(id) },
+            select: { organizationId: true },
+        });
+
+        if (!existingCustomer) {
+            return res.status(404).json(new ApiError(404, "Customer not found."));
+        }
+
+        await ensureUserCanAccessOrganization(req.user, existingCustomer.organizationId);
         
         const customer = await prisma.customer.update({
             where:{id:Number(id)},
             data:{
                 companyName,
-                email,
+                email: normalizedEmail,
                 contactPersonName,
                 contactPersonEmail,
                 mobile,
@@ -634,8 +701,13 @@ const searchCustomer = asyncHandler(async(req,res)=>{
             throw new ApiError(400,"seach term in empty.")
         }
 
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
         const customer = await prisma.customer.findMany({
             where: {
+                ...(isSuperAdmin(req.user) ? {} : { organizationId: { in: organizationIds } }),
                 OR: [
                     { companyName: { contains: searchTerm, mode: "insensitive" } },
                     { customerCode: { contains: searchTerm, mode: "insensitive" } },
@@ -664,8 +736,15 @@ const getCustomerByID = asyncHandler( async (req, res) =>{
             return res.status(400).json(new ApiError(400,'customer id is requied.'))
         }
 
-        const customer = await prisma.customer.findUnique({
-            where:{id:Number(id)},
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
+        const customer = await prisma.customer.findFirst({
+            where:{
+                id:Number(id),
+                ...(isSuperAdmin(req.user) ? {} : { organizationId: { in: organizationIds } }),
+            },
             select: publicCustomerSelect,
         })
 
@@ -696,6 +775,8 @@ const toggleStatus = asyncHandler( async (req, res) =>{
         if(!customerData){
             return res.status(404).json(new ApiError(404,"Customer not found."))
         }
+
+        await ensureUserCanAccessOrganization(req.user, customerData.organizationId);
 
         const customer = await prisma.customer.update({
             where: {id:Number(id)},

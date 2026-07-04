@@ -1,5 +1,4 @@
 import {ApiError}  from "../utils/ApiError.js";
-import {asyncHandler} from "../utils/asyncHandler.js";
 
 // authorizeRoles.js
 export const authorizeRoles = (allowedRoles = []) => {
@@ -8,16 +7,16 @@ export const authorizeRoles = (allowedRoles = []) => {
       const user = req.user ?? req.customer; // assuming user info is attached to req (e.g., by auth middleware)
 
       if (!user) {
-        return res.status(401).json({ message: 'Unauthorized: No user role found' });
+        return res.status(401).json(new ApiError(401, "Unauthorized: No user role found"));
       }
 
       if (!allowedRoles.includes(user.role)) {
-        return res.status(403).json({ message: 'Forbidden: You do not have permission to access this resource' });
+        return res.status(403).json(new ApiError(403, "Forbidden: You do not have permission to access this resource"));
       }
 
       next(); // authorized, proceed
     } catch (err) {
-      return res.status(500).json({ message: 'Server error', error: err.message });
+      return res.status(500).json(new ApiError(500, "Server error"));
     }
   };
 };
@@ -46,4 +45,3 @@ export const authorizeRoles = (allowedRoles = []) => {
   
 
   
-

@@ -8,6 +8,8 @@ import {signupEmailTempate} from "../templates/signup.templates.js"
 import {generateRandomString, diffTwoDateTime} from "../utils/common.js"
 import {resetPasswordTempate} from "../templates/resetPassword.template.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
+import { assertStrongPassword, assertValidEmail, normalizeEmail } from "../utils/validation.js";
+import { logger } from "../utils/logger.js";
 
 import prisma from "../db/prisma.js";
 
@@ -50,9 +52,11 @@ const registerUser = asyncHandler(async (req,res) => {
             if([firstName,lastName,email,mobile,role,assignedCustomerId,assignedOrgId].some((field) => String(field ?? "").trim() === "")){
                 throw new ApiError(400, "All field are required")
             }
+            const normalizedEmail = normalizeEmail(email);
+            assertValidEmail(normalizedEmail);
 
             const existingUser = await prisma.user.count({
-                where:{email}
+                where:{email: normalizedEmail}
             });
 
             if(existingUser){
@@ -75,7 +79,7 @@ const registerUser = asyncHandler(async (req,res) => {
                     data:{
                         firstName,
                         lastName,
-                        email,
+                        email: normalizedEmail,
                         password:encodepassword,
                         mobile,
                         role,
@@ -153,7 +157,10 @@ const loginUser = asyncHandler( async (req,res)=>{
         }
 
         // check user in db
-        const user = await prisma.user.findUnique({where:{email: email}});
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
+
+        const user = await prisma.user.findUnique({where:{email: normalizedEmail}});
 
         if(!user){
             //throw new ApiError(400,"User not found")
@@ -163,6 +170,10 @@ const loginUser = asyncHandler( async (req,res)=>{
         // check the active account 
         if(user.isActive == false){
             return res.status(400).json(new ApiResponse(400,null, "User is not active. Please active the account or contact admin team."))   
+        }
+
+        if(user.isLocked){
+            return res.status(423).json(new ApiResponse(423,null, "User account is locked. Please reset your password or contact admin team."))
         }
 
         const log={
@@ -228,7 +239,7 @@ const loginUser = asyncHandler( async (req,res)=>{
             )
         )
     } catch (error) {
-        console.log(" User Controller :: Login User :: error ", error)
+        logger.error("User login failed", error)
         return res.status(400).json(new ApiError(400, `something went wrong in login the user ${error?.message}`))
     }
 })
@@ -265,7 +276,7 @@ const logoutUser = asyncHandler(async(req,res)=>{
         )
 
     } catch (error) {
-        console.log("User COntroller :: Logout :: error ", error)
+        logger.error("User logout failed", error)
         return res.status(400).json(new ApiError(400, `something went wrong in logout the user ${error?.message}`))
     }
 })
@@ -279,6 +290,8 @@ const changeCurrentPassword = asyncHandler(async(req, res) =>{
         if (!oldPassword || !newPassword) {
             return res.status(400).json(new ApiError(400, "Old password and new password are required."))
         }
+
+        assertStrongPassword(newPassword);
 
         const user = await prisma.user.findUnique({
             where: { id: req.user?.id },
@@ -327,7 +340,7 @@ const changeCurrentPassword = asyncHandler(async(req, res) =>{
         .json(new ApiResponse(200, changePassword , "Password Changed Successfully"))
 
     } catch (error) {
-        console.log("User Controller :: Changerpassword :: error", error)
+        logger.error("User password change failed", error)
         return res.status(400).json(new ApiError(400, `something went wrong in change current password ${error?.message}`))
     }
 })
@@ -390,7 +403,7 @@ const activeUser = asyncHandler(async(req, res)=>{
         }
 
     } catch (error) {
-        console.log("User Controller :: Active User :: error ", error)
+        logger.error("User activation failed", error)
         return res.status(400).json(new ApiError(400, `something went wrong in change current password ${error?.message}`))
     }
 })
@@ -400,10 +413,12 @@ const getUserDetail = asyncHandler( async (req, res) =>{
     try{
 
         const {email} = req.body
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
         //const user = await User.findByField("email='"+email+"'")
         //const user = await User.find({'email':email}).execute();
         const user = await prisma.user.findUnique({
-            where:{email:email},
+            where:{email:normalizedEmail},
             omit:{
                 password:true,
                 activationToken:true,
@@ -450,12 +465,12 @@ const getUserDetail = asyncHandler( async (req, res) =>{
             }else{
                 return res.status(400).json(new ApiError(400," Error while storeing token."))
             }
-        }else{
-            return res.status(404).json(new ApiError(404," email address is not found. "))
         }
 
+        return res.status(200).json(new ApiResponse(200, null, "If the email exists, a reset link will be sent."))
+
     }catch(error){
-        console.log(" UserController :: getUserDetail :: error ", error)
+        logger.error("User password reset request failed", error)
         return res.status(400).json(new ApiError(400, `something went wrong in get User Detail ${error?.message}`))
     }
 })
@@ -465,6 +480,7 @@ const forgetPassword = asyncHandler( async (req, res) =>{
 
         const {token} = req.params
         const {newPassword} = req.body
+        assertStrongPassword(newPassword);
     
         //const user = await User.findByField("email='"+email+"'")
         //const user = await User.find({'activation_token':token}).execute()
@@ -482,7 +498,7 @@ const forgetPassword = asyncHandler( async (req, res) =>{
             description : `${user.firstName} ${user.lastName} reset the password`,
         }
 
-        if(user.passwordResetToken == token && (!user.passwordResetExpires || user.passwordResetExpires > new Date())){
+        if(user.passwordResetToken == token && user.passwordResetExpires && user.passwordResetExpires > new Date()){
             const encryptNewPassword =  await bcrypt.hash(newPassword, 10)
             //const changePassword = await User.update({'id':user.id}, {password: encryptNewPassword, activation_token: null })
             const changePassword = await prisma.user.update({
@@ -513,7 +529,7 @@ const forgetPassword = asyncHandler( async (req, res) =>{
         }
 
     }catch(error){
-        console.log('User Controller :: forgetPassword :: error ', error.message )
+        logger.error('User forgot password failed', error)
         return res.status(400).json(new ApiError(400, `something went wrong in forget password ${error?.message}`))
     }
 
@@ -580,13 +596,15 @@ const updateUser = asyncHandler( async (req, res) =>{
         if([first_name,last_name,email,mobile,role].some((field) => field?.trim() === "")){
             return res.status(400).json(new ApiError(400,"All field are required" ))
         }        
+        const normalizedEmail = normalizeEmail(email);
+        assertValidEmail(normalizedEmail);
 
         const user = await prisma.user.update({
             where:{id:Number(id)},
             data:{
                 firstName:first_name,
                 lastName:last_name, 
-                email:email,
+                email:normalizedEmail,
                 mobile:mobile,
                 role:role,
                 isActive:is_active

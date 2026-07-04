@@ -2,6 +2,8 @@
 import fs from "fs"; //filesystem
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { ApiError } from "./ApiError.js";
+import { logger } from "./logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,11 +43,10 @@ function createFolder(jobId, foldername){
         const folder  = fs.existsSync(folderName)
         if(!folder){
             fs.mkdirSync(folderName,{recursive:true});
-            console.log(`Folder "${folderName}" created successfully.`);
+            logger.info(`Folder "${folderName}" created successfully.`);
         }
-        console.log(`Folder "${folderName}" already successfully.`);
     } catch (err) {
-        console.error(`Error creating folder "${folderName}":`, err);
+        logger.error(`Error creating folder "${folderName}":`, err);
     }
 }
 
@@ -74,9 +75,8 @@ async function moveFile(jobId,foldername){
     
             try {
                 fs.renameSync(oldPath, newPath);
-                //console.log(`File ${file} moved successfully`);
             } catch (err) {
-                console.error(`Error moving file: ${file}`, err);
+                logger.error(`Error moving file: ${file}`, err);
             }
         });
     
@@ -87,8 +87,32 @@ async function moveFile(jobId,foldername){
     }    
 }
 
+async function moveUploadedFiles(files = [], jobId, foldername){
+    try {
+        const uploadDir = path.join(__dirname,`../../public/uploads/${jobId}/${foldername}`);
+        fs.mkdirSync(uploadDir, { recursive: true });
+
+        const movedFiles = [];
+
+        for (const file of files) {
+            if (!file?.path || !file?.filename) {
+                continue;
+            }
+
+            const newPath = path.join(uploadDir, file.filename);
+            fs.renameSync(file.path, newPath);
+            movedFiles.push(file.filename);
+        }
+
+        return movedFiles;
+    } catch (error) {
+        throw new ApiError(400, "Error while moving uploaded files", error?.message)
+    }
+}
+
 
 export {
     createFolder, 
-    moveFile
+    moveFile,
+    moveUploadedFiles
 }

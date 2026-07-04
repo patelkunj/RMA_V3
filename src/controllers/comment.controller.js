@@ -2,13 +2,36 @@ import prisma from "../db/prisma.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { createFolder, moveFile } from "../utils/fileUpload.js";
+import { moveUploadedFiles } from "../utils/fileUpload.js";
 import { generateRandomString } from "../utils/common.js";
+
+const getDocumentType = (fileName) => {
+    const extension = fileName.toLowerCase();
+
+    if (
+        extension.endsWith(".jpg") ||
+        extension.endsWith(".jpeg") ||
+        extension.endsWith(".png") ||
+        extension.endsWith(".webp")
+    ) {
+        return "IMAGE";
+    }
+
+    if (extension.endsWith(".pdf")) {
+        return "PDF";
+    }
+
+    if (extension.endsWith(".doc") || extension.endsWith(".docx")) {
+        return "DOC";
+    }
+
+    return "OTHER";
+};
 
 const insertComment = asyncHandler(async (req, res) => {
     try {
 
-        const { repair_job_id, category, message } = req.body;
+        const { repair_job_id, message } = req.body;
 
         if (!repair_job_id) {
             return res
@@ -16,65 +39,64 @@ const insertComment = asyncHandler(async (req, res) => {
                 .json(new ApiError(400, "Job id is required."));
         }
 
-        let comment = null;
+        if (!req.user) {
+            return res
+                .status(403)
+                .json(new ApiError(403, "Only internal users can add repair job comments."));
+        }
 
-        if (message?.trim()) {
+        if (!message?.trim()) {
+            return res
+                .status(400)
+                .json(new ApiError(400, "Comment message is required."));
+        }
 
-            comment = await prisma.repairJobComment.create({
+        const repairJob = await prisma.repairJob.findUnique({
+            where: { id: Number(repair_job_id) },
+            select: { id: true },
+        });
+
+        if (!repairJob) {
+            return res
+                .status(404)
+                .json(new ApiError(404, "Repair job not found."));
+        }
+
+        const comment = await prisma.$transaction(async (tx) => {
+            const createdComment = await tx.repairJobComment.create({
                 data: {
                     repairJobId: Number(repair_job_id),
                     userId: req.user.id,
-                    visibility: category, // remove if not added in schema
                     comment: message.trim()
                 }
             });
 
-            if (!comment) {
-                return res
-                    .status(400)
-                    .json(new ApiError(400, "Comment wasn't inserted properly."));
-            }
-        }
+            if (req.files?.length > 0) {
+                const uploadFiles = await moveUploadedFiles(
+                    req.files,
+                    repair_job_id,
+                    "comment"
+                );
 
-        if (req.files?.length > 0 && comment) {
-
-            createFolder(repair_job_id, "comment");
-
-            const uploadFiles = await moveFile(
-                repair_job_id,
-                "comment"
-            );
-
-            for (const file of uploadFiles) {
-
-                let documentType = "OTHER";
-
-                const extension = file.toLowerCase();
-
-                if (
-                    extension.includes("jpg") ||
-                    extension.includes("jpeg") ||
-                    extension.includes("png") ||
-                    extension.includes("webp")
-                ) {
-                    documentType = "IMAGE";
+                for (const file of uploadFiles) {
+                    await tx.document.create({
+                        data: {
+                            repairJobId: Number(repair_job_id),
+                            relatedType: "repair_comment",
+                            relatedId: createdComment.id,
+                            documentName: file,
+                            documentUrl: `/uploads/${repair_job_id}/comment/${file}`,
+                            documentType: getDocumentType(file),
+                            uploadedBy: req.user.id,
+                            uploadedRole: req.user.role,
+                            fileHash: generateRandomString(15)
+                        }
+                    });
                 }
-
-                await prisma.document.create({
-                    data: {
-                        repairJobId: Number(repair_job_id),
-                        relatedType: "repair_comment",
-                        relatedId: comment.id,
-                        documentName: file,
-                        documentUrl: `/uploads/${repair_job_id}/comment/${file}`,
-                        documentType,
-                        uploadedBy: req.user.id,
-                        uploadedRole: req.user.role,
-                        fileHash: generateRandomString(15)
-                    }
-                });
             }
-        }
+
+            return createdComment;
+        });
 
         return res
             .status(200)
@@ -178,13 +200,22 @@ const listComment = asyncHandler(async (req, res) => {
 const updateComment = asyncHandler(async (req, res) => {
     try {
 
-        const { id, category, message } = req.body;
+        const { id, message } = req.body;
 
         if (!id || !message?.trim()) {
             return res.status(400).json(
                 new ApiError(
                     400,
                     "All fields are required."
+                )
+            );
+        }
+
+        if (!req.user) {
+            return res.status(403).json(
+                new ApiError(
+                    403,
+                    "Only internal users can update repair job comments."
                 )
             );
         }
@@ -211,8 +242,6 @@ const updateComment = asyncHandler(async (req, res) => {
                     id: Number(id)
                 },
                 data: {
-                    userId: req.user.id,
-                    visibility: category, // remove if not added in schema
                     comment: message.trim(),
                     isEdited: true
                 }

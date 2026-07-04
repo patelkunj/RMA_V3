@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer"
+import { logger } from "./logger.js";
 
 class Email {
   send = async (toEmail, subject, text) => {
@@ -24,7 +25,7 @@ class Email {
       return result
 
     } catch (error) {
-      console.log(" Email :: error" , error)
+      logger.error("Email send failed", error)
     }
   };
 }

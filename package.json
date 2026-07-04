@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
+    "test": "node --test",
+    "syntax:check": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "verify": "npm run prisma:validate && npm run syntax:check && npm test",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate"
   },

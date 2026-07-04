@@ -18,7 +18,6 @@ class UserOrganizationModel extends BaseModel {
     })
 
     const result = await this.createMany(dataSet)
-    console.log("result", result)
 
     return result;
   }
@@ -40,7 +39,6 @@ class UserOrganizationModel extends BaseModel {
     }
 
     const result = await this.createMany(dataSet)
-    console.log("result", result)
 
     return result;
   }

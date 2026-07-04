@@ -26,11 +26,19 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
                 email: true,
                 firstName:true,
                 lastName: true,
-                role:true
+                role:true,
+                isActive: true,
+                isLocked: true,
             },
         });
 
         if (user) {
+            if (!user.isActive || user.isLocked) {
+                return res.status(401).json(new ApiError(401, "Account is not active."));
+            }
+
+            delete user.isActive;
+            delete user.isLocked;
             req.user = user;
             return next();
         }
@@ -48,6 +56,8 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
                 customerCode: true,
                 organizationId: true,
                 role: true,
+                isActive: true,
+                isLocked: true,
             },
         });
 
@@ -55,12 +65,18 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
             return res.status(401).json(new ApiError(401, "Invalid Access Token"));
         }
 
+        if (!customer.isActive || customer.isLocked) {
+            return res.status(401).json(new ApiError(401, "Account is not active."));
+        }
+
+        delete customer.isActive;
+        delete customer.isLocked;
         req.customer = customer;
         return next();
     } catch (error) {
         return res
             .status(401)
-            .json(new ApiError(401, error?.message || "Issue in verifyJWT middleware"));
+            .json(new ApiError(401, "Invalid or expired access token"));
     }
 });
 

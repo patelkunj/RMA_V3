@@ -2,8 +2,31 @@ import prisma from "../db/prisma.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { createFolder, moveFile } from "../utils/fileUpload.js";
+import { moveUploadedFiles } from "../utils/fileUpload.js";
 import { generateRandomString } from "../utils/common.js";
+
+const getDocumentType = (fileName) => {
+    const extension = fileName.toLowerCase();
+
+    if (
+        extension.endsWith(".jpg") ||
+        extension.endsWith(".jpeg") ||
+        extension.endsWith(".png") ||
+        extension.endsWith(".webp")
+    ) {
+        return "IMAGE";
+    }
+
+    if (extension.endsWith(".pdf")) {
+        return "PDF";
+    }
+
+    if (extension.endsWith(".doc") || extension.endsWith(".docx")) {
+        return "DOC";
+    }
+
+    return "OTHER";
+};
 
 const insertChat = asyncHandler(async (req, res) => {
     try {
@@ -14,6 +37,26 @@ const insertChat = asyncHandler(async (req, res) => {
             throw new ApiError(400, "Repair job id is required.");
         }
 
+        if (!message?.trim() && !req.files?.length) {
+            throw new ApiError(400, "Message or attachment is required.");
+        }
+
+        const senderId = req.user?.id || req.customer?.id;
+        const senderRole = req.user?.id ? "USER" : "CUSTOMER";
+
+        if (!senderId) {
+            throw new ApiError(401, "Unauthorized sender.");
+        }
+
+        const repairJob = await prisma.repairJob.findUnique({
+            where: { id: Number(repair_job_id) },
+            select: { id: true },
+        });
+
+        if (!repairJob) {
+            throw new ApiError(404, "Repair job not found.");
+        }
+
         let chat = null;
 
         if (message?.trim()) {
@@ -21,8 +64,8 @@ const insertChat = asyncHandler(async (req, res) => {
             chat = await prisma.chat.create({
                 data: {
                     repairJobId: Number(repair_job_id),
-                    senderId: req.user?.id || req.customer?.id,
-                    senderRole: req.user?.id ? "USER" : "CUSTOMER",
+                    senderId,
+                    senderRole,
                     message: message.trim()
                 }
             });
@@ -34,25 +77,9 @@ const insertChat = asyncHandler(async (req, res) => {
 
         if (req.files?.length > 0) {
 
-            createFolder(repair_job_id, "chat");
-
-            const uploadFiles = await moveFile(repair_job_id, "chat");
+            const uploadFiles = await moveUploadedFiles(req.files, repair_job_id, "chat");
 
             for (const file of uploadFiles) {
-
-                let documentType = "OTHER";
-
-                const extension = file.toLowerCase();
-
-                if (
-                    extension.includes("jpg") ||
-                    extension.includes("jpeg") ||
-                    extension.includes("png") ||
-                    extension.includes("webp")
-                ) {
-                    documentType = "IMAGE";
-                }
-
                 await prisma.document.create({
                     data: {
                         repairJobId: Number(repair_job_id),
@@ -60,8 +87,8 @@ const insertChat = asyncHandler(async (req, res) => {
                         relatedId: chat?.id || 0,
                         documentName: file,
                         documentUrl: `/uploads/${repair_job_id}/chat/${file}`,
-                        documentType,
-                        uploadedBy: req.user?.id || req.customer?.id,
+                        documentType: getDocumentType(file),
+                        uploadedBy: senderId,
                         uploadedRole: req.user?.role || req.customer?.role,
                         fileHash: generateRandomString(15)
                     }
@@ -425,4 +452,3 @@ export{
 //         return res.status(400).json(new ApiError(400,"coudn't get the count of chat."))
 //     }
 // }) 
-

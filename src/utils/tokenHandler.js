@@ -1,5 +1,15 @@
 import jwt from "jsonwebtoken"
 
+const requiredEnv = (name) => {
+    const value = process.env[name];
+
+    if (!value) {
+        throw new Error(`${name} environment variable is required.`);
+    }
+
+    return value;
+};
+
 const generateAccessToken = (user) => {
    return jwt.sign(
       {
@@ -7,9 +17,9 @@ const generateAccessToken = (user) => {
           email:user.email,
           username:user.firstName
       },
-      process.env.ACCESS_TOKEN_SECRET,
+      requiredEnv("ACCESS_TOKEN_SECRET"),
       {
-          expiresIn: process.env.ACCESS_TOKEN_EXPIRY
+          expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m"
       }
     )
   }
@@ -20,20 +30,23 @@ const generateAccessToken = (user) => {
         {
             id:user.id
         },
-        process.env.REFRESH_TOKEN_SECRET,
+        requiredEnv("REFRESH_TOKEN_SECRET"),
         {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d"
         }
     )
   }
 
   const isJwtExpired = (token) => {
     try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
+        const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
         const now = Math.floor(Date.now() / 1000);
+        if (typeof payload.exp !== "number") {
+            return true;
+        }
         return payload.exp < now;
     } catch {
-        return false; // malformed token
+        return true;
     }
 }
 

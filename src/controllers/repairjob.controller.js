@@ -90,12 +90,45 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { overduedays, generateRandomString } from "../utils/common.js"
-import { moveFile } from "../utils/fileUpload.js"
+import { moveUploadedFiles } from "../utils/fileUpload.js"
+import {
+    ensureRepairJobAccess,
+    ensureUserCanAccessOrganization,
+    getAssignedOrganizationIds,
+    getRepairJobAccessWhere,
+    isSuperAdmin,
+} from "../utils/accessControl.js";
+import { logger } from "../utils/logger.js";
 import prisma from "../db/prisma.js"
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const JOB_STATUSES = new Set(["CREATED", "RECEIVED", "IN_PROGRESS", "WAITING_PARTS", "COMPLETED", "CANCELLED"]);
+const appUrl = () => process.env.APP_URL || "http://localhost:3000";
+
+const getDocumentType = (fileName) => {
+    const extension = fileName.toLowerCase();
+
+    if (
+        extension.endsWith(".jpg") ||
+        extension.endsWith(".jpeg") ||
+        extension.endsWith(".png") ||
+        extension.endsWith(".webp")
+    ) {
+        return "IMAGE";
+    }
+
+    if (extension.endsWith(".pdf")) {
+        return "PDF";
+    }
+
+    if (extension.endsWith(".doc") || extension.endsWith(".docx")) {
+        return "DOC";
+    }
+
+    return "OTHER";
+};
 
 // for admin,
 const listRepairJob = asyncHandler(async (req, res) => {
@@ -104,34 +137,29 @@ const listRepairJob = asyncHandler(async (req, res) => {
         const status = (req.body.field || "created").toUpperCase()
         // NOTE: uppercased to match the JobStatus enum (CREATED, RECEIVED, IN_PROGRESS, WAITING_PARTS, COMPLETED, CANCELLED)
 
-        let where;
-        if(req.user){
-            // User role
-
-            const assignedCustomers = await prisma.userCustomer.findMany({
-                where: { userId: req.user.id },
-                select: { customerId: true },
-            });
-            const assignedOrganizations = await prisma.userOrganization.findMany({
-                where: { userId: req.user.id },
-                select: { organizationId: true },
-            });
-
-            where = {
-                jobStatus: status,
-                customerId: { in: assignedCustomers.map((uc) => uc.customerId) },
-                organizationId: { in: assignedOrganizations.map((uo) => uo.organizationId) },
-            }
-        }else{
-            // customer role
-            where = { jobStatus: status, customerId: req.customer.id }
+        if (!JOB_STATUSES.has(status)) {
+            return res.status(400).json(new ApiError(400, "Invalid repair job status."));
         }
 
-        const repairjob = await prisma.repairJob.findMany({ where });
+        const page = Math.max(Number(req.body.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.body.limit) || 50, 1), 100);
+        const skip = (page - 1) * limit;
 
-        if(!repairjob || repairjob.length == 0 ){
-            return res.status(404).json(new ApiResponse(404, null, " No repair job found." ))
-        }
+        const where = {
+            ...(await getRepairJobAccessWhere(req)),
+            jobStatus: status,
+        };
+
+        const [repairjob, total] = await Promise.all([
+            prisma.repairJob.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { id: "desc" },
+            }),
+            prisma.repairJob.count({ where }),
+        ]);
+
 
         // NOTE: findMany() always returns an array. The original
         // `typeof repairjob === "object"` branch was actually unreachable for
@@ -145,7 +173,13 @@ const listRepairJob = asyncHandler(async (req, res) => {
             updatedDate: moment(job.updatedDate).format('DD-MM-YYYY HH:mm:ss'),
         }))
 
-        return res.status(200).json(new ApiResponse(200, modifiedData, " List of repair job." ))
+        return res.status(200).json(new ApiResponse(200, {
+            repairJobs: modifiedData,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        }, " List of repair job." ))
 
     }catch(error){
         throw new ApiError(400, "Error while listing the repair job ", error.message)
@@ -184,13 +218,19 @@ const insertRepairJob = asyncHandler(async (req, res) => {
             return res.status(400).json(new ApiError(400, " Please fill the required field information"))
         }
 
+        if (!req.user) {
+            return res.status(403).json(new ApiError(403, "Only internal users can create repair jobs from this endpoint."));
+        }
+
+        await ensureUserCanAccessOrganization(req.user, organization_id);
+
         //TODO: improve logic
         // Generate RA JOB Number Automatically 
         const lastInsertId = await prisma.repairJob.findFirst({ orderBy: { id: 'desc' } });
         let job_id;
         if(req.customer){
             job_id = lastInsertId
-            ? `${req.customer?.customerCode}-${String(lastInsertId.id).padStart(5, '0')}`
+            ? `${req.customer?.customerCode}-${String(Number(lastInsertId.id) + 1).padStart(5, '0')}`
             : `${req.customer?.customerCode}-00001`;
         }else{
             job_id = lastInsertId
@@ -211,9 +251,6 @@ const insertRepairJob = asyncHandler(async (req, res) => {
         }
 
         // Insert job into the database
-        // ⚠️ FK RISK (see conversion notes #1): createdBy must reference a real
-        // User.id. If a customer (no User row) creates this job, this insert
-        // will throw a foreign key violation.
         const createdRepairJob = await prisma.repairJob.create({
             data: {
                 raJobId: job_id,
@@ -232,34 +269,20 @@ const insertRepairJob = asyncHandler(async (req, res) => {
                 productFault: (product_fault === 'undefine') ? null  : product_fault, // ⚠️ productFault is required (non-nullable) in the schema — null here would throw
                 videoUrl: (video_url === 'undefine') ? null : video_url,
                 customerTrackingNumber: (customer_tracking_number === 'undefine') ? null  : customer_tracking_number,
-                createdBy: Number(req.user?.id) || Number(req.customer?.id),
-                createdRoleBy: req.user?.role || "Customer",
+                createdBy: Number(req.user.id),
+                createdRoleBy: req.user.role,
                 // createdDate / updatedDate intentionally omitted — handled by @default(now()) / @updatedAt
             },
         });
 
-        console.log(" Repair job Controller :: Insert by custoemr :: repairjob ", createdRepairJob);
-
         // create a folder with Job Number in Public/uploads Path: ../../public/uploads
         createFolder(createdRepairJob.id)
 
-        // Move all the file  from temp to upload folder
-        const uploadfiles = await moveFile(createdRepairJob.id,"repair_job")
-        console.log("uploadfiles data ", uploadfiles)
+        // Move only the files attached to this request.
+        const uploadfiles = await moveUploadedFiles(req.files, createdRepairJob.id,"repair_job")
 
         let documents = []
-        let type='file';
-        // ⚠️ NOTE: preserved from the original — `type` is declared OUTSIDE the
-        // loop and only ever flips to 'image', never back to 'file'. This means
-        // once one image file is seen, every later file in the same batch gets
-        // tagged as an image too. Looks like a pre-existing bug; flagging
-        // rather than silently fixing since it changes behavior.
         for(let j=0; j< uploadfiles.length; j++){
-
-            if(uploadfiles[j].toString().includes("jpg") || uploadfiles[j].toString().includes("jpeg") || uploadfiles[j].toString().includes("png") || uploadfiles[j].toString().includes("webp")){
-                type = 'image'
-            }
-
             documents[j] = await prisma.document.create({
                 data: {
                     repairJobId: createdRepairJob.id,
@@ -267,7 +290,7 @@ const insertRepairJob = asyncHandler(async (req, res) => {
                     relatedId: createdRepairJob.id,
                     documentName: uploadfiles[j].toString(),
                     documentUrl: `/uploads/${createdRepairJob.id}/repair_job/${uploadfiles[j].toString()}`,
-                    documentType: type === 'image' ? 'IMAGE' : 'OTHER', // mapped to DocumentType enum
+                    documentType: getDocumentType(uploadfiles[j].toString()),
                     uploadedBy: req.user?.id || req.customer?.id,
                     uploadedRole: req.user?.role || req.customer?.role || "CUSTOMER",
                     fileHash: generateRandomString(15),
@@ -277,9 +300,9 @@ const insertRepairJob = asyncHandler(async (req, res) => {
 
         //Log creation
         const log = {
-            actorId: req.customer?.id || req.user?.id ,
-            actorRole: req.user?.role || "Customer", // NOTE: original had `req.user?.user_role` (no such field elsewhere) — using `req.user?.role` for consistency with the rest of the file
-            description: `${req.customer?.companyName || `${req.user?.firstName} ${req.user?.lastName}`} created the RA Job ${job_id}`,
+            actorId: req.user.id ,
+            actorRole: req.user.role,
+            description: `${req.user.firstName} ${req.user.lastName} created the RA Job ${job_id}`,
             logStatus: "Successful", // Assume success by default
         };
 
@@ -299,18 +322,18 @@ const insertRepairJob = asyncHandler(async (req, res) => {
                 await new Email().send(
                     req.customer?.email,
                     `${job_id} created successfully`,
-                    signupEmailTempate(`http://localhost:3000/api/v1/users/activeuser/${req.customer?.id}`)
+                    signupEmailTempate(`${appUrl()}/api/v1/repairjobs/repairJob`)
                 );
             }else{
                 await new Email().send(
                     email,
                     `${job_id} created successfully`,
-                    signupEmailTempate(`http://localhost:3000/api/v1/users/activeuser/${req.customer?.id}`)
+                    signupEmailTempate(`${appUrl()}/api/v1/repairjobs/repairJob`)
                 );
             }
 
         } catch (emailError) {
-            console.error("Email sending failed:", emailError);
+            logger.error("Email sending failed:", emailError);
             log.description += ` (Email sending failed: ${emailError.message})`;
             log.logStatus = "Warning";
         }
@@ -324,9 +347,10 @@ const insertRepairJob = asyncHandler(async (req, res) => {
 
         // Only throw an error if we haven't already sent a response
         if (!res.headersSent) {
-            return res.status(400).json(new ApiError(400, "Internal Server Error", error.message))
+            logger.error("Repair job creation failed:", error);
+            return res.status(500).json(new ApiError(500, "Internal Server Error"))
         } else {
-            console.error("Error occurred after response was sent:", error);
+            logger.error("Error occurred after response was sent:", error);
         }
     }
 })
@@ -346,11 +370,14 @@ const updateRepairJobSKU = asyncHandler(async (req, res) => {
             return res.status(400).json(new ApiError(400, "All fields are required"));
         }
 
-        // Find the SKU from Product Table
-        // ⚠️ NOTE: sku is only unique per-organization in the schema (@@unique([organizationId, sku])),
-        // so a bare sku lookup with no organizationId filter (same as the original) could match the
-        // wrong product across organizations. Preserved as-is — consider scoping by organizationId.
-        const product = await prisma.product.findFirst({ where: { sku } });
+        const existingRepairJob = await ensureRepairJobAccess(req, id);
+
+        const product = await prisma.product.findFirst({
+            where: {
+                sku,
+                organizationId: existingRepairJob.organizationId,
+            },
+        });
         if(!product){
             return res.status(400).json( new ApiError(400," SKU didn't found in the product list."));
         }
@@ -397,16 +424,14 @@ const updateRepairJobSerialNumber = asyncHandler(async (req, res) => {
              return res.status(400).json(new ApiError(400, "All fields are required"));
         }
 
-        // Find the Serial number, joined with its Product
-        // serialNumber is @unique on ProductSerial, so findUnique is valid here.
-        // NOTE: with `include` the joined fields live under `.product`, they are
-        // no longer flattened onto the result the way the old `.join()` did.
+        const existingRepairJob = await ensureRepairJobAccess(req, id);
+
         const productSerial = await prisma.productSerial.findUnique({
             where: { serialNumber: serial_number },
             include: { product: true },
         });
 
-        if(!productSerial || !productSerial.product){
+        if(!productSerial || !productSerial.product || productSerial.organizationId !== existingRepairJob.organizationId){
             return res.status(400).json( new ApiError(404," Serial Number didn't found in the Serial Number list."))
         }
 
@@ -458,6 +483,14 @@ const serialNumberLookup = asyncHandler(async (req, res) => {
            return res.status(400).json( new ApiError(400, " serial number is not found."))
         }
 
+        const hasAccessToSerial = req.customer
+            ? req.customer.organizationId === productSerial.organizationId
+            : isSuperAdmin(req.user) || (await getAssignedOrganizationIds(req.user)).includes(productSerial.organizationId);
+
+        if (!hasAccessToSerial) {
+            return res.status(403).json(new ApiError(403, "You do not have access to this serial number."));
+        }
+
         return res.status(200).json(new ApiResponse(200, productSerial, " Serial Number found successfully"))
 
     } catch (error) {
@@ -474,6 +507,8 @@ const updateTrackingNumber = asyncHandler(async (req, res) => {
         if (!tracking_number) {
             return res.status(400).json( new ApiError(400, " Tracking number is required"));
         }
+
+        await ensureRepairJobAccess(req, id);
 
         const repairjob = await prisma.repairJob.update({
             where: { id: Number(id) },
@@ -510,9 +545,16 @@ const updateStatus = asyncHandler(async (req, res) => {
             return res.status(400).json(new ApiError(400, "All fields are required"));
         }
 
+        await ensureRepairJobAccess(req, id);
+
+        const nextStatus = status.toUpperCase();
+        if (!JOB_STATUSES.has(nextStatus)) {
+            return res.status(400).json(new ApiError(400, "Invalid repair job status."));
+        }
+
         const repairjob = await prisma.repairJob.update({
             where: { id: Number(id) },
-            data: { jobStatus: status.toUpperCase() }, // mapped to JobStatus enum
+            data: { jobStatus: nextStatus },
         });
         if(!repairjob){
             return res.status(400).json(new ApiError(400, " Status isn't updated successfaully."))
@@ -541,6 +583,8 @@ const updateDispatchId = asyncHandler(async (req, res) => {
         if ([id, dispatchId].some(field => !field?.trim())) {
             return res.status(400).json(new ApiError(400, "All fields are required"));
         }
+
+        await ensureRepairJobAccess(req, id);
 
         const repairjob = await prisma.repairJob.update({
             where: { id: Number(id) },
@@ -580,6 +624,8 @@ const receiveJob = asyncHandler(async (req, res) => {
             // since otherwise execution falls through to the update() below.
             return res.status(400).json(new ApiError(400, " Tracking number is required"));
         }
+
+        await ensureRepairJobAccess(req, id);
 
         const repairjob = await prisma.repairJob.update({
             where: { id: Number(id) },
@@ -621,6 +667,7 @@ const repairJob = asyncHandler(async (req, res) => {
         if (!id) {
             throw new ApiError(400, "fields is required");
         }
+        await ensureRepairJobAccess(req, id);
         const repairjob = await prisma.repairJob.findUnique({ where: { id: Number(id) } });
 
          if(!repairjob){
@@ -652,6 +699,7 @@ const searchRepairJob = asyncHandler(async (req, res) => {
         // the original search actually covered.
         const repairjob = await prisma.repairJob.findMany({
             where: {
+                ...(await getRepairJobAccessWhere(req)),
                 OR: [
                     { raJobId: { contains: searchData, mode: 'insensitive' } },
                     { sku: { contains: searchData, mode: 'insensitive' } },
@@ -689,6 +737,31 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
             throw new ApiError(404,"No data found from body")
         }
 
+        if (!req.user) {
+            throw new ApiError(403, "Only internal users can create repair jobs.");
+        }
+
+        const organizationId = Number(Jobdata.organization_id);
+        const customerId = Number(Jobdata.Customer_id);
+
+        if (!organizationId || !customerId || !Jobdata.store_code) {
+            throw new ApiError(400, "organization_id, Customer_id, and store_code are required.");
+        }
+
+        await ensureUserCanAccessOrganization(req.user, organizationId);
+
+        const customer = await prisma.customer.findFirst({
+            where: {
+                id: customerId,
+                organizationId,
+            },
+            select: { id: true },
+        });
+
+        if (!customer) {
+            throw new ApiError(400, "Customer does not belong to the selected organization.");
+        }
+
         let repairJob, length, job_id;
         let jobInfo=[];
 
@@ -700,9 +773,14 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
 
         for(let i=0; i< length; i++){
 
-            job_id = await getLastInsertJob(req.customer?.customerCode)
+            job_id = await getLastInsertJob(Jobdata.store_code)
 
             let inputdata = (length==1) ? JSON.parse(Jobdata.data) : JSON.parse(Jobdata.data[i])
+
+            const nextStatus = inputdata.job_status ? String(inputdata.job_status).toUpperCase() : "CREATED";
+            if (!JOB_STATUSES.has(nextStatus)) {
+                throw new ApiError(400, "Invalid repair job status.");
+            }
 
             // Check if the job already exists
             // NOTE: "Dispatch" mapped to COMPLETED, same as insertRepairJob (see conversion notes #4)
@@ -716,16 +794,11 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
                 throw new ApiError(400, "Repair job already exists");
             }
 
-            // ⚠️ FK RISK (conversion notes #1) — same createdBy/User concern as insertRepairJob.
-            // ⚠️ MISSING REQUIRED FIELDS (conversion notes #10) — the original payload here
-            // never set organizationId or createdRoleBy, both required (non-nullable, no
-            // default) on RepairJob. I've filled them in with the most reasonable source
-            // available — please confirm these are right for your bulk-insert flow.
             repairJob = await prisma.repairJob.create({
                 data: {
                     raJobId: job_id,
-                    organizationId: Number(Jobdata.organization_id ?? req.customer?.organizationId ?? req.user?.organizationId), // ⚠️ filled in — was missing entirely in the original
-                    customerId: Number(Jobdata.Customer_id),
+                    organizationId,
+                    customerId,
                     customerJobNo: Jobdata.company_job_no,
                     salesInvoice: inputdata.sales_invoice,
                     sku: inputdata.sku,
@@ -740,13 +813,11 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
                     productFault: inputdata.product_fault,
                     videoUrl: inputdata.video_url || null,
                     customerTrackingNumber: inputdata.customer_tracking_number || null,
-                    jobStatus: inputdata.job_status ? String(inputdata.job_status).toUpperCase() : undefined, // falls back to schema default (CREATED) if not supplied
-                    createdBy: Number(inputdata.created_by),
-                    createdRoleBy: inputdata.created_role_by || req.customer?.role || "Customer", // ⚠️ filled in — was missing entirely in the original
+                    jobStatus: nextStatus,
+                    createdBy: Number(req.user.id),
+                    createdRoleBy: req.user.role,
                 },
             });
-
-            console.log(" Repair job Controller :: Insert by custoemr :: repairjob ", repairJob);
 
             // Prisma's create() already returns the full row — no need for a follow-up
             // findById() the way the old ORM apparently required.
@@ -756,37 +827,33 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
             // create a folder with Job Number in Public/uploads Path: ../../public/uploads
             createFolder(createdRepairJob.raJobId)
 
-            // Move all the file  from temp to upload folder
-            const uploadfiles = await moveFile(createdRepairJob.raJobId)
-            console.log("uploadfiles data ", uploadfiles)
+            // Move only the files attached to this request.
+            const uploadfiles = i === 0
+                ? await moveUploadedFiles(req.files, createdRepairJob.id, "repair_job")
+                : []
 
             let documents = []
             for(let j=0; j< uploadfiles.length; j++){
-                // ⚠️ MISSING REQUIRED FIELDS (conversion notes #10) — the original Document.create()
-                // here only set repair_job_id/document_name/upload_at/upload_by, but Document also
-                // requires relatedType, relatedId, documentUrl, documentType, and fileHash (all
-                // non-nullable, no default). Filled in following the same pattern used in
-                // insertRepairJob — please confirm these choices.
                 documents[j] = await prisma.document.create({
                     data: {
                         repairJobId: createdRepairJob.id,
-                        relatedType: "repair_job",       // ⚠️ filled in — was missing
-                        relatedId: createdRepairJob.id,  // ⚠️ filled in — was missing
+                        relatedType: "repair_job",
+                        relatedId: createdRepairJob.id,
                         documentName: uploadfiles[j].toString(),
-                        documentUrl: `/uploads/${createdRepairJob.id}/repair_job/${uploadfiles[j].toString()}`, // ⚠️ filled in — was missing
-                        documentType: "OTHER",           // ⚠️ filled in — was missing; original had no image/file detection in this function
-                        uploadedBy: Number(inputdata.created_by),
-                        uploadedRole: inputdata.created_role_by || req.customer?.role || "Customer", // ⚠️ filled in — was missing
-                        fileHash: generateRandomString(15), // ⚠️ filled in — was missing
+                        documentUrl: `/uploads/${createdRepairJob.id}/repair_job/${uploadfiles[j].toString()}`,
+                        documentType: getDocumentType(uploadfiles[j].toString()),
+                        uploadedBy: Number(req.user.id),
+                        uploadedRole: req.user.role,
+                        fileHash: generateRandomString(15),
                     },
                 });
             }
 
             //Log creation
             const log = {
-                actorId: inputdata.created_by, // NOTE: original key was `emp_id`, which doesn't exist on SystemLog — mapped to actorId
-                actorRole: inputdata.created_role_by || req.customer?.role || "Customer", // ⚠️ filled in — required field, was missing entirely in the original
-                description: `${inputdata.companyName} created the RA Job ${job_id}`,
+                actorId: req.user.id,
+                actorRole: req.user.role,
+                description: `${req.user.firstName} ${req.user.lastName} created the RA Job ${job_id}`,
                 logStatus: "Successful", // Assume success by default
             };
 
@@ -801,10 +868,10 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
                 await new Email().send(
                     Jobdata.email,
                     `${job_id} created successfully`,
-                    signupEmailTempate(`http://localhost:3000/api/v1/users/activeuser/${inputdata.created_by }`)
+                    signupEmailTempate(`${appUrl()}/api/v1/repairjobs/repairJob`)
                 );
             } catch (emailError) {
-                console.error("Email sending failed:", emailError);
+                logger.error("Email sending failed:", emailError);
                 log.description += ` (Email sending failed: ${emailError.message})`;
                 log.logStatus = "Warning";
             }
@@ -824,7 +891,7 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
      // Generate RA JOB Number Automatically
      const lastInsertId = await prisma.repairJob.findFirst({ orderBy: { id: 'desc' } });
      return  lastInsertId
-         ? `${store_code}-${String(lastInsertId.id).padStart(5, '0')}`
+         ? `${store_code}-${String(Number(lastInsertId.id) + 1).padStart(5, '0')}`
          : `${store_code}-00001`;
 
 }
@@ -837,9 +904,9 @@ function createFolder(jobId){
 
     try {
         fs.mkdirSync(folderName,{recursive:true});
-        console.log(`Folder "${folderName}" created successfully.`);
+        logger.info(`Folder "${folderName}" created successfully.`);
     } catch (err) {
-        console.error(`Error creating folder "${folderName}":`, err);
+        logger.error(`Error creating folder "${folderName}":`, err);
     }
 }
 

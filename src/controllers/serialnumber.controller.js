@@ -4,23 +4,70 @@ import { asyncHandler } from "../utils/asyncHandler.js"
 import xlsx from 'xlsx';
 import fs from 'fs';
 import prisma from "../db/prisma.js"
+import {
+    ensureUserCanAccessOrganization,
+    getAssignedOrganizationIds,
+    isSuperAdmin,
+} from "../utils/accessControl.js";
+
+const parseDate = (value, fieldName) => {
+    const date = new Date(value);
+    if (!value || Number.isNaN(date.getTime())) {
+        throw new ApiError(400, `${fieldName} must be a valid date.`);
+    }
+    return date;
+};
+
+const ensureProductBelongsToOrganization = async (productId, organizationId) => {
+    const product = await prisma.product.findFirst({
+        where: {
+            id: Number(productId),
+            organizationId: Number(organizationId),
+        },
+        select: { id: true },
+    });
+
+    if (!product) {
+        throw new ApiError(400, "Product does not belong to the selected organization.");
+    }
+};
  
  
 const listSerialNumber = asyncHandler(async(req,res) => {
     // Select with pagination.
     try {
+        const page = Math.max(Number(req.query.page || req.body?.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.query.limit || req.body?.limit) || 50, 1), 100);
+        const skip = (page - 1) * limit;
+
+        const organizationIds = isSuperAdmin(req.user)
+            ? []
+            : await getAssignedOrganizationIds(req.user);
+
+        const where = isSuperAdmin(req.user)
+            ? {}
+            : { organizationId: { in: organizationIds } };
  
-        const list = await prisma.productSerial.findMany({
-            include: {
-                product: { select: { id: true } },
-            },
-        });
+        const [list, total] = await Promise.all([
+            prisma.productSerial.findMany({
+                where,
+                skip,
+                take: limit,
+                include: {
+                    product: { select: { id: true, sku: true, name: true } },
+                },
+                orderBy: { id: "desc" },
+            }),
+            prisma.productSerial.count({ where }),
+        ]);
  
-        if(!list || list.length == 0 ){
-            return res.status(404).json(new ApiResponse(404, null, " No Data Found." ))
-        }
- 
-        return res.status(200).json(new ApiResponse(200, list, " List of SerialNumbers"))
+        return res.status(200).json(new ApiResponse(200, {
+            serialNumbers: list,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        }, " List of SerialNumbers"))
  
     } catch (error) {
         throw new ApiError(400, " Error while listing serialnumber", error?.message)
@@ -43,19 +90,22 @@ const updateSerialNumber = asyncHandler(async(req,res) => {
         } = req.body
  
          // validation of data
-        if([serial_number,sales_order].some((field) => field?.trim() === "")){
+        if([id, organization_id, product_id, serial_number,sales_order, sales_date, warranty_expriy].some((field) => String(field ?? "").trim() === "")){
             return res.status(400).json(new ApiError(400, "All field are required"))
         }
+
+        await ensureUserCanAccessOrganization(req.user, organization_id);
+        await ensureProductBelongsToOrganization(product_id, organization_id);
  
         const data = await prisma.productSerial.update({
             where: { id: Number(id) },
             data: {
-                organizationId: organization_id !== undefined ? Number(organization_id) : undefined,
-                productId: product_id !== undefined ? Number(product_id) : undefined,
+                organizationId: Number(organization_id),
+                productId: Number(product_id),
                 serialNumber: serial_number,
                 salesInvoice: sales_order, // mapped — see conversion notes #1
-                saleDate: sales_date ? new Date(sales_date) : undefined,
-                warrantyExpiry: warranty_expriy ? new Date(warranty_expriy) : undefined,
+                saleDate: parseDate(sales_date, "sales_date"),
+                warrantyExpiry: parseDate(warranty_expriy, "warranty_expriy"),
                 isReplacementProduct: is_replacement !== undefined ? (is_replacement === true || is_replacement === 'true') : undefined,
             },
         });
@@ -85,9 +135,12 @@ const insertSerialNumber = asyncHandler(async(req,res) => {
         } = req.body
  
         // validation of data
-        if([serial_number,sales_order].some((field) => field?.trim() === "")){
+        if([organization_id, product_id, serial_number,sales_order, sales_date, warranty_expriy].some((field) => String(field ?? "").trim() === "")){
             return res.status(400).json(new ApiError(400, "All field are required"))
         }
+
+        await ensureUserCanAccessOrganization(req.user, organization_id);
+        await ensureProductBelongsToOrganization(product_id, organization_id);
  
         // serialNumber is @unique, so findUnique is the correct lookup here.
         const existingSerialNumber = await prisma.productSerial.findUnique({
@@ -104,8 +157,8 @@ const insertSerialNumber = asyncHandler(async(req,res) => {
                 productId: Number(product_id),
                 serialNumber: serial_number,
                 salesInvoice: sales_order, // mapped — see conversion notes #1
-                saleDate: new Date(sales_date),
-                warrantyExpiry: new Date(warranty_expriy),
+                saleDate: parseDate(sales_date, "sales_date"),
+                warrantyExpiry: parseDate(warranty_expriy, "warranty_expriy"),
                 isReplacementProduct: is_replacement === true || is_replacement === 'true',
             },
         });
@@ -126,6 +179,10 @@ const insertSerialNumber = asyncHandler(async(req,res) => {
 const uploadSerialNumber = asyncHandler(async(req,res) => {
     // upload serial number from excel file.
     try {
+        if (!req.file?.path) {
+            return res.status(400).json(new ApiError(400, "Excel file is required."));
+        }
+
         const filePath = req.file.path;
  
         // Read the Excel file
@@ -136,11 +193,11 @@ const uploadSerialNumber = asyncHandler(async(req,res) => {
  
         // Clean up uploaded file
         fs.unlinkSync(filePath);
- 
+
         return res.status(200).json(new ApiResponse(200, jsonData, " Excel File Data " ));
- 
+
     } catch (error) {
-        throw new ApiError(400, " Error while updateing serialnumber." ,error?.message)
+        return res.status(400).json(new ApiError(400, " Error while uploading serialnumber." ,error?.message))
     }
 })
  
