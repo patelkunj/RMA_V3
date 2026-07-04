@@ -97,6 +97,8 @@ model Organization {
   products          Product[]
   productSerials    ProductSerial[]
   notifications     Notification[]
+  
+  @@unique([email,name])
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
