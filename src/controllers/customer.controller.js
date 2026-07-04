@@ -97,8 +97,8 @@ const registerCustomer = asyncHandler(async (req,res) => {
             }
             //const last_StoreCode = await Customer.selectFields('id').orderBy('id',"DESC").limit(1).execute();
             const last_StoreCode = await prisma.customer.findFirst({
-                orderBy: {id: 'DESC'},
-            })
+                orderBy: {id: 'desc'},
+            })        
             let Store_code = last_StoreCode ? `${org.alias}${String(Number(last_StoreCode.id) + 1 ).padStart(2, '0')}` : `${org.alias}01`  ; 
 
         
@@ -124,7 +124,7 @@ const registerCustomer = asyncHandler(async (req,res) => {
                     doaWarrantyDays: Number(doaWarrantyDays),
                     doaWarrantyTypes: doaWarrantyType,
                     warrantyRemarks,
-                    isPickupFaulty,
+                    isPickupFaulty:Boolean(isPickupFaulty),
                     salesPerson, 
                     isActive:false,
                     isLocked:true, 
