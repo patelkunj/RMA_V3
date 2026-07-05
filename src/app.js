@@ -56,6 +56,7 @@ import organizationRouter from "./routes/organization.routes.js"
 import chatRouter from "./routes/chat.routers.js"
 import commentRouter from "./routes/comment.routers.js"
 import repairJobCostingRouter from "./routes/repairjobcost.routes.js"
+import reportRouter from "./routes/report.routes.js"
 // import videoRouter from "./routes/video.routes.js";
 // import commentRoute from "./routes/comment.routes.js"
 // import tweetRoute from "./routes/tweet.routes.js"
@@ -71,6 +72,7 @@ app.use("/api/v1/organizations", organizationRouter)
 app.use("/api/v1/chats", chatRouter)
 app.use("/api/v1/comments", commentRouter)
 app.use("/api/v1/repairjobcost",repairJobCostingRouter)
+app.use("/api/v1/reports", reportRouter)
 // app.use("/api/v1/videos",videoRouter)
 // app.use("/api/v1/comments",commentRoute)
 // app.use("/api/v1/tweets",tweetRoute)
