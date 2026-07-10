@@ -193,6 +193,10 @@ Mounted routers:
 /chats
 /comments
 /reports
+/notifications
+/documents
+/repairjob-timeline
+/sessions
 ```
 
 Some legacy route names are still supported for frontend compatibility. New route work should prefer REST-style, lowercase, kebab-case paths.
@@ -213,6 +217,8 @@ Current reports:
 - `/costs`
 - `/products`
 - `/customers`
+- `/service-report/:repairJobId.pdf`
+- `/invoice/:repairJobId.pdf`
 
 Reports support query or body filters such as:
 
@@ -226,6 +232,17 @@ Reports support query or body filters such as:
   "limit": 20
 }
 ```
+
+## Added Operational APIs
+
+New supporting API areas:
+
+- `/api/v1/sessions`: refresh user access tokens, list sessions, revoke one session, or revoke all sessions.
+- `/api/v1/notifications`: list the signed-in recipient's notifications, create admin notifications, mark read, and fetch unread count.
+- `/api/v1/documents`: list, inspect, download, and deactivate repair-job documents with repair-job access checks.
+- `/api/v1/repairjob-timeline`: fetch repair-job audit logs and status tracking history.
+- `/api/v1/reports/service-report/:repairJobId.pdf`: download a repair-job service report PDF.
+- `/api/v1/reports/invoice/:repairJobId.pdf`: download a repair-job invoice PDF.
 
 ## Code Conventions
 

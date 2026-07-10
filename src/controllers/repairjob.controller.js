@@ -193,6 +193,14 @@ const insertRepairJob = asyncHandler(async (req, res) => {
             },
         });
 
+        await prisma.repairJobTracking.create({
+            data: {
+                repairJobId: createdRepairJob.id,
+                status: createdRepairJob.jobStatus,
+                changedBy: Number(req.user.id),
+            },
+        });
+
         // create a folder with Job Number in Public/uploads Path: ../../public/uploads
         createFolder(createdRepairJob.id)
 
@@ -478,14 +486,23 @@ const updateStatus = asyncHandler(async (req, res) => {
             return res.status(400).json(new ApiError(400, " Status isn't updated successfaully."))
         }
 
-        await prisma.repairJobAuditLog.create({
-            data: {
-                repairJobId: Number(id),
-                actionType: "UPDATE",
-                description: `Updated  Status to ${status}`,
-                performedBy: req.user?.id,
-            },
-        });
+        await prisma.$transaction([
+            prisma.repairJobAuditLog.create({
+                data: {
+                    repairJobId: Number(id),
+                    actionType: "STATUS_CHANGE",
+                    description: `Updated Status to ${nextStatus}`,
+                    performedBy: req.user?.id,
+                },
+            }),
+            prisma.repairJobTracking.create({
+                data: {
+                    repairJobId: Number(id),
+                    status: nextStatus,
+                    changedBy: Number(req.user?.id),
+                },
+            }),
+        ]);
         return res.status(200).json(new ApiResponse(200, repairjob, " Status updated successfaully."))
     } catch (error) {
         return res.status(400).json(new ApiError(400, "Error while updating status"))
@@ -519,9 +536,16 @@ const updateDispatchId = asyncHandler(async (req, res) => {
         await prisma.repairJobAuditLog.create({
             data: {
                 repairJobId: Number(id),
-                actionType: "UPDATE",
+                actionType: "STATUS_CHANGE",
                 description: `Updated  Dispatch ID to ${dispatchId}`,
                 performedBy: req.user?.id,
+            },
+        });
+        await prisma.repairJobTracking.create({
+            data: {
+                repairJobId: Number(id),
+                status: "COMPLETED",
+                changedBy: Number(req.user?.id),
             },
         });
         return res.status(200).json(new ApiResponse(200, repairjob, " Dispatch ID updated successfaully."))
@@ -564,9 +588,16 @@ const receiveJob = asyncHandler(async (req, res) => {
         await prisma.repairJobAuditLog.create({
             data: {
                 repairJobId: Number(id),
-                actionType: "UPDATE",
+                actionType: "STATUS_CHANGE",
                 description: `Receievd Job with Tracking Number - ${tracking_number}`,
                 performedBy: req.user?.id,
+            },
+        });
+        await prisma.repairJobTracking.create({
+            data: {
+                repairJobId: Number(id),
+                status: "RECEIVED",
+                changedBy: Number(req.user?.id),
             },
         });
 
@@ -734,6 +765,14 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
                     jobStatus: nextStatus,
                     createdBy: Number(req.user.id),
                     createdRoleBy: req.user.role,
+                },
+            });
+
+            await prisma.repairJobTracking.create({
+                data: {
+                    repairJobId: repairJob.id,
+                    status: repairJob.jobStatus,
+                    changedBy: Number(req.user.id),
                 },
             });
 

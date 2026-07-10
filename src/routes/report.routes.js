@@ -9,9 +9,19 @@ import {
     getSummaryReport,
     getThroughputReport,
 } from "../controllers/report.controller.js";
+import {
+    invoice,
+    serviceReport,
+} from "../controllers/pdfreport.controller.js";
 
 const router = Router();
 const REPORT_ROLES = ["ADMIN", "SUPER_ADMIN"];
+const JOB_PDF_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN", "CUSTOMER"];
+
+router.get("/service-report/:repairJobId.pdf", verifyJWT, authorizeRoles(JOB_PDF_ROLES), serviceReport);
+router.get("/invoice/:repairJobId.pdf", verifyJWT, authorizeRoles(JOB_PDF_ROLES), invoice);
+router.post("/service-report", verifyJWT, authorizeRoles(JOB_PDF_ROLES), serviceReport);
+router.post("/invoice", verifyJWT, authorizeRoles(JOB_PDF_ROLES), invoice);
 
 router.use(verifyJWT, authorizeRoles(REPORT_ROLES));
 

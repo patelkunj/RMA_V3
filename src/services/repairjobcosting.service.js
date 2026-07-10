@@ -7,7 +7,7 @@ const COST_TYPES = new Set([
     "SHIPPING",
     "REPLACEMENT",
     "CREDIT_NOTE",
-    "TAX",
+    "REPAIR"
 ]);
 
 const normalizeCostType = (value) => {

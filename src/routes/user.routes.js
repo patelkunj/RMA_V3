@@ -15,12 +15,14 @@ import {
     toggleStatus,
     updateUser,
 } from "../controllers/user.controller.js";
+import { refresh } from "../controllers/session.controller.js";
 
 const router = Router();
 const INTERNAL_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN"];
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
 router.post("/login", authRateLimit, loginUser);
+router.post("/refresh-token", authRateLimit, refresh);
 router.get("/activeuser/:token", authRateLimit, activeUser);
 router.post("/getUserDetail", authRateLimit, getUserDetail);
 router.post("/forgetPassword/:token", authRateLimit, forgetPassword);

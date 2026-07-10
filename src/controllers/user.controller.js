@@ -34,6 +34,29 @@ const cookieOptions = () => ({
     sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
     maxAge: 3600000,
 });
+const failedLoginAttempts = new Map();
+const maxFailedLoginAttempts = Number(process.env.AUTH_LOCK_MAX_FAILURES || 5);
+
+const recordFailedLogin = async (user) => {
+    const key = `user:${user.id}`;
+    const attempts = (failedLoginAttempts.get(key) || 0) + 1;
+    failedLoginAttempts.set(key, attempts);
+
+    if (attempts >= maxFailedLoginAttempts) {
+        failedLoginAttempts.delete(key);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { isLocked: true },
+        });
+        return true;
+    }
+
+    return false;
+};
+
+const clearFailedLogin = (user) => {
+    failedLoginAttempts.delete(`user:${user.id}`);
+};
 
 const registerUser = asyncHandler(async (req,res) => {
     try{
@@ -190,9 +213,15 @@ const loginUser = asyncHandler( async (req,res)=>{
         if(!isPasswordValid){
             log.logStatus =  "Faliure";
             await prisma.systemLog.create({data:log})
+            const locked = await recordFailedLogin(user);
+            if (locked) {
+                return res.status(423).json(new ApiResponse(423, null, "Too many failed login attempts. User account is locked."))
+            }
             //throw new ApiError(401, "password is not valid ")
             return res.status(400).json(new ApiResponse(400,null, "password is not valid."))
         }
+
+        clearFailedLogin(user);
 
         // generae Accesstoken & refToken
         const accessToken= await generateAccessToken(user)
@@ -213,6 +242,8 @@ const loginUser = asyncHandler( async (req,res)=>{
         const data = {
             userId: loggedInUser.id,
             refreshToken: refreshToken,
+            ipAddress: req.ip || req.socket?.remoteAddress || null,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         }
 
         // insert data into session table
@@ -266,6 +297,15 @@ const logoutUser = asyncHandler(async(req,res)=>{
         }
 
         await prisma.systemLog.create({data:log})
+        const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+        if (refreshToken) {
+            await prisma.sessionManagement.deleteMany({
+                where: {
+                    userId: user.id,
+                    refreshToken,
+                },
+            });
+        }
 
         return res
         .status(200)

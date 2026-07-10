@@ -20,6 +20,9 @@
     { "key": "repairJobId", "value": "9102" },
     { "key": "repairCostId", "value": "9803" },
     { "key": "commentId", "value": "9901" },
+    { "key": "notificationId", "value": "0" },
+    { "key": "documentId", "value": "0" },
+    { "key": "sessionId", "value": "0" },
     { "key": "activationToken", "value": "replace-with-token" },
     { "key": "resetToken", "value": "replace-with-token" }
   ],
@@ -56,6 +59,32 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"seed.superadmin@example.test\",\n  \"password\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh User Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json?.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/refresh-token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
             }
           }
         },
@@ -158,6 +187,67 @@
             "url": "{{baseUrl}}/api/v1/users/status",
             "body": { "mode": "raw", "raw": "{\n  \"id\": {{userId}},\n  \"isActive\": true\n}" }
           }
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "item": [
+        {
+          "name": "Refresh Session Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json?.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/sessions/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const first = Array.isArray(json?.data) ? json.data[0] : null;",
+                  "if (first?.id) pm.collectionVariables.set('sessionId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/sessions" }
+        },
+        {
+          "name": "Revoke Session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/sessions/revoke",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{sessionId}}\n}" }
+          }
+        },
+        {
+          "name": "Revoke All Sessions",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/sessions/revoke-all" }
         }
       ]
     },
@@ -689,6 +779,131 @@
       ]
     },
     {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List My Notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const first = json?.data?.notifications?.[0];",
+                  "if (first?.id) pm.collectionVariables.set('notificationId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/notifications?page=1&limit=20" }
+        },
+        {
+          "name": "Create Notification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.id) pm.collectionVariables.set('notificationId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/notifications",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"recipientType\": \"USER\",\n  \"recipientId\": {{userId}},\n  \"referenceType\": \"repair_job\",\n  \"referenceId\": {{repairJobId}},\n  \"title\": \"Postman notification\",\n  \"message\": \"Notification created from Postman collection.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/notifications/read",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{notificationId}},\n  \"isRead\": true\n}" }
+          }
+        },
+        {
+          "name": "Unread Notification Count",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/notifications/unread-count" }
+        },
+        {
+          "name": "Admin List Notifications",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/notifications/admin/all?organizationId={{organizationId}}&page=1&limit=20" }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "List Repair Job Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const first = Array.isArray(json?.data) ? json.data[0] : null;",
+                  "if (first?.id) pm.collectionVariables.set('documentId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/documents?repairJobId={{repairJobId}}" }
+        },
+        {
+          "name": "Get Document",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/documents/{{documentId}}" }
+        },
+        {
+          "name": "Download Document",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/documents/{{documentId}}/download" }
+        },
+        {
+          "name": "Deactivate Document",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/documents/{{documentId}}/deactivate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repair Job Timeline",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/repairjob-timeline/{{repairJobId}}/audit-logs" }
+        },
+        {
+          "name": "Create Audit Log",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjob-timeline/audit-logs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repairJobId\": {{repairJobId}},\n  \"actionType\": \"CONTACT\",\n  \"description\": \"Postman audit log entry.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Tracking History",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/repairjob-timeline/{{repairJobId}}/tracking" }
+        }
+      ]
+    },
+    {
       "name": "Reports",
       "item": [
         {
@@ -714,6 +929,14 @@
         {
           "name": "Customer Report",
           "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/customers?startDate=2026-01-01&endDate=2026-12-31&limit=20" }
+        },
+        {
+          "name": "Service Report PDF",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/service-report/{{repairJobId}}.pdf" }
+        },
+        {
+          "name": "Invoice PDF",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/invoice/{{repairJobId}}.pdf" }
         },
         {
           "name": "Summary Report POST",

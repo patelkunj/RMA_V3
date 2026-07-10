@@ -96,6 +96,17 @@ const insertChat = asyncHandler(async (req, res) => {
             }
         }
 
+        await prisma.Notification.create({
+            data: {
+                repairJobId: Number(repair_job_id),
+                notificationType: "CHAT",
+                message: `New chat message from ${senderRole.toLowerCase()}.`,
+                isRead: false,
+                createdBy: senderId,
+                createdRole: senderRole
+            }
+        });
+
         return res
             .status(200)
             .json(new ApiResponse(200, chat, "Chat sent successfully."));

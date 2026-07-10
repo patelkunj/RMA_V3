@@ -138,7 +138,8 @@ VALUES
     (9809, 9109, 9206, 'PART', 1, 64.00, 64.00, true, 92.00, NOW() - INTERVAL '35 days', NOW()),
     (9810, 9110, 9205, 'PART', 1, 34.00, 34.00, true, 52.00, NOW() - INTERVAL '5 days', NOW()),
     (9811, 9111, 9204, 'PART', 2, 18.00, 36.00, true, 60.00, NOW() - INTERVAL '2 days', NOW()),
-    (9812, 9111, NULL, 'LABOR', 1, 55.00, 55.00, true, 85.00, NOW() - INTERVAL '1 day', NOW());
+    (9812, 9111, NULL, 'LABOR', 1, 55.00, 55.00, true, 85.00, NOW() - INTERVAL '1 day', NOW()),
+    (9813, 9106, NULL, 'REPAIR', 1, 180.00, 180.00, true, 180.00, NOW() - INTERVAL '2 days', NOW());
 
 INSERT INTO "RepairJobComment"
     ("id", "repairJobId", "userId", "comment", "isEdited", "createdDate", "updatedDate")

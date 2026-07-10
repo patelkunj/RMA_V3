@@ -55,6 +55,29 @@ const cookieOptions = () => ({
     sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
     maxAge: 3600000,
 });
+const failedCustomerLoginAttempts = new Map();
+const maxFailedCustomerLoginAttempts = Number(process.env.AUTH_LOCK_MAX_FAILURES || 5);
+
+const recordFailedCustomerLogin = async (customer) => {
+    const key = `customer:${customer.id}`;
+    const attempts = (failedCustomerLoginAttempts.get(key) || 0) + 1;
+    failedCustomerLoginAttempts.set(key, attempts);
+
+    if (attempts >= maxFailedCustomerLoginAttempts) {
+        failedCustomerLoginAttempts.delete(key);
+        await prisma.customer.update({
+            where: { id: customer.id },
+            data: { isLocked: true },
+        });
+        return true;
+    }
+
+    return false;
+};
+
+const clearFailedCustomerLogin = (customer) => {
+    failedCustomerLoginAttempts.delete(`customer:${customer.id}`);
+};
 
 
 
@@ -233,8 +256,14 @@ const loginCustomer = asyncHandler( async (req, res) =>{
         if(!isPasswordValid){
             log.logStatus =  "Faliure";
             await prisma.systemLog.create({data:log})
+            const locked = await recordFailedCustomerLogin(customer);
+            if (locked) {
+                return res.status(423).json(new ApiError(423, "Too many failed login attempts. Customer account is locked."))
+            }
             return res.status(401).json(new ApiError(401, "password is not valid "))
         }
+
+        clearFailedCustomerLogin(customer);
 
         // generae Accesstoken & refToken
         //const {accessToken, refreshToken} = await generateAccessAndRefereshToken(customer)

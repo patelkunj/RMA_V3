@@ -57,6 +57,10 @@ import chatRouter from "./routes/chat.routers.js";
 import commentRouter from "./routes/comment.routers.js";
 import repairJobCostingRouter from "./routes/repairjobcost.routes.js";
 import reportRouter from "./routes/report.routes.js";
+import notificationRouter from "./routes/notification.routes.js";
+import documentRouter from "./routes/document.routes.js";
+import repairJobTimelineRouter from "./routes/repairjobtimeline.routes.js";
+import sessionRouter from "./routes/session.routes.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/customers", customerRouter);
@@ -69,6 +73,10 @@ app.use("/api/v1/chats", chatRouter);
 app.use("/api/v1/comments", commentRouter);
 app.use("/api/v1/repairjobcost", repairJobCostingRouter);
 app.use("/api/v1/reports", reportRouter);
+app.use("/api/v1/notifications", notificationRouter);
+app.use("/api/v1/documents", documentRouter);
+app.use("/api/v1/repairjob-timeline", repairJobTimelineRouter);
+app.use("/api/v1/sessions", sessionRouter);
 
 app.use((req, res) => {
     return res.status(404).json(new ApiError(404, "Route not found"));
