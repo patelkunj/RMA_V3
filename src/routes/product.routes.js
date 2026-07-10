@@ -1,23 +1,21 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
-import { 
-    listAllProduct,
-    searchProduct,
+import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
+import {
     insertProduct,
+    listProducts,
+    searchProduct,
     updateProduct,
-    listProducts
 } from "../controllers/product.controller.js";
 
-const router = Router()
+const router = Router();
+const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
+router.use(verifyJWT, authorizeRoles(ADMIN_ROLES));
 
-//Secure routes
-// verfiyJWT is middleware
-router.route("/").get(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),listProducts)
-router.route("/search").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchProduct)
-router.route("/").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),insertProduct)
-router.route("/").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateProduct)
-//router.route("/product").post(verifyJWT,authorizeRoles(["Admin","Super Admin","Customer"]),listProducts)
+router.get("/", listProducts);
+router.post("/", insertProduct);
+router.put("/", updateProduct);
+router.post("/search", searchProduct);
 
-export default router
+export default router;

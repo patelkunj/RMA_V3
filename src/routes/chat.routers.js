@@ -7,17 +7,21 @@ import {
     insertChat,
     listChat,
     toggleRead,
-    unreadCount
-} from "../controllers/chats.controller.js"
+    unreadCount,
+} from "../controllers/chats.controller.js";
 
+const router = Router();
+const CHAT_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN", "CUSTOMER"];
 
+router.use(verifyJWT, authorizeRoles(CHAT_ROLES));
 
-const router =  Router()
+router.post("/list", listChat);
+router.post("/create", uploadRateLimit, upload.any(), insertChat);
+router.put("/toggle-read", toggleRead);
+router.post("/unread-count", unreadCount);
 
-router.route('/list').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),listChat)
-router.route('/create').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),uploadRateLimit,upload.any(),insertChat)
-router.route('/toggle-read').put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),toggleRead)
-router.route('/unread-count').post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),unreadCount) 
+router.route("/")
+    .post(uploadRateLimit, upload.any(), insertChat);
+router.patch("/read", toggleRead);
 
-
-export default router
+export default router;

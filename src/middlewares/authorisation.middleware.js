@@ -20,28 +20,3 @@ export const authorizeRoles = (allowedRoles = []) => {
     }
   };
 };
-
-
-// export const authorizeRoles = function  authorization(...allowedRoles) { asyncHandler(async(req, res, next)=> {
-//       try {
-//         if (!req.user) {
-//           //return res.status(401).json({ message: "Unauthorized: No user info" });
-//           throw new ApiError(403, "Unauthorized: No user info")
-//         }
-  
-//         if (!allowedRoles.includes(req.user.user_role)) {
-//           //return res.status(403).json({ message: "Forbidden: Insufficient role" });
-//           throw new ApiError(403, "Forbidden: Insufficient role")
-//         }
-  
-//         next(); // user has the right role
-//       } catch (error) {
-//         console.error('Authorization error:', error);
-//         //res.status(500).json({ message: "Internal Server Error" });
-//         throw new ApiError(500, "Internal Server Error")
-//       }
-//     });
-//   };
-  
-
-  

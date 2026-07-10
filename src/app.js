@@ -1,13 +1,13 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser"
-import dotenv from 'dotenv';
+import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
 import { ApiError } from "./utils/ApiError.js";
 import { securityHeaders } from "./middlewares/security.middleware.js";
 import { apiRateLimit } from "./middlewares/rateLimit.middleware.js";
 import { activityLogger } from "./middlewares/activityLogger.middleware.js";
 import { logger } from "./utils/logger.js";
-dotenv.config()
+dotenv.config();
 
 const app = express();
 app.disable("x-powered-by");
@@ -22,8 +22,8 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-app.use(securityHeaders)
-app.use(activityLogger)
+app.use(securityHeaders);
+app.use(activityLogger);
 
 app.use(cors({
     origin(origin, callback) {
@@ -35,47 +35,40 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(apiRateLimit)
-app.use(express.json({limit:"16kb"}))
-app.use(express.urlencoded({extended:true, limit:"16kb"}))
+app.use(apiRateLimit);
+app.use(express.json({ limit: "16kb" }));
+app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public", {
     dotfiles: "deny",
     index: false,
     maxAge: process.env.NODE_ENV === "production" ? "1d" : 0,
-}))
-app.use(cookieParser()) // for access the Cookies value
+}));
+app.use(cookieParser());
 
 
 //routes
 import userRouter from "./routes/user.routes.js";
-import customerRouter from "./routes/customer.routes.js"
-import repairJobRouter from "./routes/repairjob.routes.js"
-import productRouter from "./routes/product.routes.js"
-import serialNumberRouter from "./routes/serialnumber.routes.js"
-import organizationRouter from "./routes/organization.routes.js"
-import chatRouter from "./routes/chat.routers.js"
-import commentRouter from "./routes/comment.routers.js"
-import repairJobCostingRouter from "./routes/repairjobcost.routes.js"
-import reportRouter from "./routes/report.routes.js"
-// import videoRouter from "./routes/video.routes.js";
-// import commentRoute from "./routes/comment.routes.js"
-// import tweetRoute from "./routes/tweet.routes.js"
+import customerRouter from "./routes/customer.routes.js";
+import repairJobRouter from "./routes/repairjob.routes.js";
+import productRouter from "./routes/product.routes.js";
+import serialNumberRouter from "./routes/serialnumber.routes.js";
+import organizationRouter from "./routes/organization.routes.js";
+import chatRouter from "./routes/chat.routers.js";
+import commentRouter from "./routes/comment.routers.js";
+import repairJobCostingRouter from "./routes/repairjobcost.routes.js";
+import reportRouter from "./routes/report.routes.js";
 
-//routes define
-app.use("/api/v1/users",userRouter)
-app.use("/api/v1/customers", customerRouter)
-app.use("/api/v1/repairjobs", repairJobRouter)
-app.use("/api/v1/products",productRouter)
-app.use("/api/v1/proudcts",productRouter)
-app.use("/api/v1/serialnumbers",serialNumberRouter)
-app.use("/api/v1/organizations", organizationRouter)
-app.use("/api/v1/chats", chatRouter)
-app.use("/api/v1/comments", commentRouter)
-app.use("/api/v1/repairjobcost",repairJobCostingRouter)
-app.use("/api/v1/reports", reportRouter)
-// app.use("/api/v1/videos",videoRouter)
-// app.use("/api/v1/comments",commentRoute)
-// app.use("/api/v1/tweets",tweetRoute)
+app.use("/api/v1/users", userRouter);
+app.use("/api/v1/customers", customerRouter);
+app.use("/api/v1/repairjobs", repairJobRouter);
+app.use("/api/v1/products", productRouter);
+app.use("/api/v1/proudcts", productRouter); // Legacy misspelled alias.
+app.use("/api/v1/serialnumbers", serialNumberRouter);
+app.use("/api/v1/organizations", organizationRouter);
+app.use("/api/v1/chats", chatRouter);
+app.use("/api/v1/comments", commentRouter);
+app.use("/api/v1/repairjobcost", repairJobCostingRouter);
+app.use("/api/v1/reports", reportRouter);
 
 app.use((req, res) => {
     return res.status(404).json(new ApiError(404, "Route not found"));
@@ -104,4 +97,4 @@ app.use((err, req, res, next) => {
 });
 
 
-export { app }
+export { app };

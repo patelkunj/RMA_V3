@@ -1,24 +1,27 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
-import {listOrganization,
+import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
+import {
     creatOrganization,
-    updateOrganization,
-    toggleStatus,
     getOrganizationDetail,
-    // searchCompany,
-    // allCompany
-} from "../controllers/organization.controller.js"
+    listOrganization,
+    toggleStatus,
+    updateOrganization,
+} from "../controllers/organization.controller.js";
 
-const router = Router()
+const router = Router();
+const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
-//secure route
-router.route("/").post(verifyJWT,authorizeRoles(["SUPER_ADMIN"]),creatOrganization)
-router.route("/").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateOrganization)
-router.route("/").get(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),listOrganization)
-router.route("/:id").get(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),getOrganizationDetail)
-router.route("/toggle").patch(verifyJWT,authorizeRoles(["SUPER_ADMIN"]),toggleStatus)
-// router.route("/search").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchCompany)
-// router.route("/all").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),allCompany)
+router.use(verifyJWT);
 
-export default router
+router.patch("/toggle", authorizeRoles(["SUPER_ADMIN"]), toggleStatus);
+router.patch("/status", authorizeRoles(["SUPER_ADMIN"]), toggleStatus);
+
+router.route("/")
+    .get(authorizeRoles(ADMIN_ROLES), listOrganization)
+    .post(authorizeRoles(["SUPER_ADMIN"]), creatOrganization)
+    .put(authorizeRoles(ADMIN_ROLES), updateOrganization);
+
+router.get("/:id", authorizeRoles(ADMIN_ROLES), getOrganizationDetail);
+
+export default router;

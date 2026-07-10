@@ -1,0 +1,733 @@
+{
+  "info": {
+    "name": "RMA V3 API",
+    "description": "Postman collection for the RMA V3 Express API. Import this file into Postman, run User Login first, then run protected requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "customerAccessToken", "value": "" },
+    { "key": "organizationId", "value": "9001" },
+    { "key": "organizationId2", "value": "9002" },
+    { "key": "userId", "value": "9002" },
+    { "key": "technicianId", "value": "9003" },
+    { "key": "customerId", "value": "9401" },
+    { "key": "customerId2", "value": "9402" },
+    { "key": "productId", "value": "9201" },
+    { "key": "serialId", "value": "9301" },
+    { "key": "repairJobId", "value": "9102" },
+    { "key": "repairCostId", "value": "9803" },
+    { "key": "commentId", "value": "9901" },
+    { "key": "activationToken", "value": "replace-with-token" },
+    { "key": "resetToken", "value": "replace-with-token" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json?.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seed.superadmin@example.test\",\n  \"password\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Activate User",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users/activeuser/{{activationToken}}"
+          }
+        },
+        {
+          "name": "Request User Password Reset",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/getUserDetail",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seed.admin@example.test\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reset User Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/forgetPassword/{{resetToken}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout User",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/users/logout" }
+        },
+        {
+          "name": "Change User Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/change_password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"Password123!\",\n  \"newPassword\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Alex\",\n  \"last_name\": \"Tester\",\n  \"email\": \"alex.tester@example.test\",\n  \"mobile\": \"+64 21 555 7777\",\n  \"role\": \"TECHNICIAN\",\n  \"assignedCustomer\": [{{customerId}}],\n  \"assignedOrg\": [{{organizationId}}]\n}"
+            }
+          }
+        },
+        {
+          "name": "List Users",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users" }
+        },
+        {
+          "name": "List Users Legacy",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/users/list_user" }
+        },
+        {
+          "name": "Find User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/find",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{userId}}\n}" }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{userId}},\n  \"first_name\": \"Anika\",\n  \"last_name\": \"Admin\",\n  \"email\": \"seed.admin@example.test\",\n  \"mobile\": \"+64 21 555 9002\",\n  \"role\": \"ADMIN\",\n  \"assignedCustomer\": [{{customerId}}, {{customerId2}}],\n  \"assignedOrg\": [{{organizationId}}],\n  \"is_active\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Toggle User Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/users/status",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{userId}},\n  \"isActive\": true\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Login Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.accessToken) pm.collectionVariables.set('customerAccessToken', json.data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seed.northcity@example.test\",\n  \"password\": \"Password123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Activate Customer",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/customers/activecustomer/{{activationToken}}"
+          }
+        },
+        {
+          "name": "Request Customer Password Reset",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/getCustomerDetail",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"seed.northcity@example.test\"\n}" }
+          }
+        },
+        {
+          "name": "Reset Customer Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/forgetPassword/{{resetToken}}",
+            "body": { "mode": "raw", "raw": "{\n  \"newPassword\": \"Password123!\"\n}" }
+          }
+        },
+        {
+          "name": "Logout Customer",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerAccessToken}}", "type": "string" }] },
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/customers/logout"
+          }
+        },
+        {
+          "name": "Change Customer Password",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerAccessToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/change_password",
+            "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"Password123!\",\n  \"newPassword\": \"Password123!\"\n}" }
+          }
+        },
+        {
+          "name": "Customer Info By Email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/customerinfo",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"seed.northcity@example.test\"\n}" }
+          }
+        },
+        {
+          "name": "Register Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"companyName\": \"Postman Customer Ltd\",\n  \"email\": \"postman.customer@example.test\",\n  \"contactPersonName\": \"Casey Test\",\n  \"contactPersonEmail\": \"casey.test@example.test\",\n  \"mobile\": \"+64 21 555 7070\",\n  \"returnAddress\": \"1 Test Street, Auckland\",\n  \"warrantyMonths\": 24,\n  \"warrantyType\": \"STANDARD\",\n  \"doaWarrantyDays\": 14,\n  \"doaWarrantyType\": \"DOA_REPLACEMENT\",\n  \"warrantyRemarks\": \"Postman-created customer.\",\n  \"isPickupFaulty\": false,\n  \"salesPerson\": \"Anika Admin\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Customers",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/customers?page=1&limit=20" }
+        },
+        {
+          "name": "Search Customers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/search",
+            "body": { "mode": "raw", "raw": "{\n  \"searchTerm\": \"North\"\n}" }
+          }
+        },
+        {
+          "name": "Find Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/find",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{customerId}}\n}" }
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{customerId}},\n  \"companyName\": \"North City Electronics\",\n  \"email\": \"seed.northcity@example.test\",\n  \"contactPersonName\": \"Priya Shah\",\n  \"contactPersonEmail\": \"priya.seed@example.test\",\n  \"mobile\": \"+64 27 555 1001\",\n  \"returnAddress\": \"44 Retail Park, Auckland 0627\",\n  \"warrantyMonths\": \"24\",\n  \"warrantyType\": \"STANDARD\",\n  \"doaArrantyDays\": \"14\",\n  \"doaWarrantyType\": \"DOA_REPLACEMENT\",\n  \"warrantyRemarks\": \"Updated from Postman.\",\n  \"salesPerson\": \"Anika Admin\",\n  \"isPickupFaulty\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Toggle Customer Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/customers/status",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{customerId}},\n  \"isActive\": true\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        {
+          "name": "List Organizations",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/organizations?page=1&limit=20" }
+        },
+        {
+          "name": "Get Organization",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}" }
+        },
+        {
+          "name": "Create Organization",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/organizations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Repair Org\",\n  \"alias\": \"PMO\",\n  \"address\": \"99 API Street\",\n  \"email\": \"postman.org@example.test\",\n  \"phone\": \"+64 9 555 7777\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Organization",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/organizations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{organizationId}},\n  \"name\": \"Acme Reverse Logistics NZ\",\n  \"alias\": \"ACM\",\n  \"address\": \"12 Logistics Way, Auckland 2013\",\n  \"email\": \"ops.seed.acme@example.test\",\n  \"phone\": \"+64 9 555 0101\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Toggle Organization Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/organizations/status",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{organizationId}},\n  \"isActive\": true\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/products?page=1&limit=20" }
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"sku\": \"PM-SKU-001\",\n  \"product_name\": \"Postman Test Product\",\n  \"model\": \"PM-1\",\n  \"color\": \"Black\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/products",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{productId}},\n  \"organizationId\": {{organizationId}},\n  \"sku\": \"CAM-4K-PRO\",\n  \"product_name\": \"4K Action Camera Pro\",\n  \"model\": \"ACP-400\",\n  \"color\": \"Black\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/products/search",
+            "body": { "mode": "raw", "raw": "{\n  \"keyword\": \"CAM\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Serial Numbers",
+      "item": [
+        {
+          "name": "List Serial Numbers",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/serialnumbers?page=1&limit=20" }
+        },
+        {
+          "name": "Create Serial Number",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/serialnumbers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": {{organizationId}},\n  \"product_id\": {{productId}},\n  \"serial_number\": \"PM-SERIAL-001\",\n  \"sales_order\": \"PM-INV-001\",\n  \"sales_date\": \"2026-01-01\",\n  \"warranty_expriy\": \"2028-01-01\",\n  \"is_replacement\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Serial Number",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/serialnumbers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{serialId}},\n  \"organization_id\": {{organizationId}},\n  \"product_id\": {{productId}},\n  \"serial_number\": \"SN-CAM4K-0001\",\n  \"sales_order\": \"INV-ACM-10001\",\n  \"sales_date\": \"2026-01-10\",\n  \"warranty_expriy\": \"2028-01-10\",\n  \"is_replacement\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Upload Serial Number Excel",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/serialnumbers/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repair Jobs",
+      "item": [
+        {
+          "name": "List Repair Jobs",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/list_repairjob",
+            "body": { "mode": "raw", "raw": "{\n  \"field\": \"IN_PROGRESS\",\n  \"page\": 1,\n  \"limit\": 20\n}" }
+          }
+        },
+        {
+          "name": "Add Repair Job",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/repairjobs/add_repairjob",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "organization_id", "value": "{{organizationId}}", "type": "text" },
+                { "key": "customer_id", "value": "{{customerId}}", "type": "text" },
+                { "key": "store_code", "value": "ACM01", "type": "text" },
+                { "key": "email", "value": "seed.northcity@example.test", "type": "text" },
+                { "key": "company_job_no", "value": "PM-JOB-001", "type": "text" },
+                { "key": "sales_invoice", "value": "INV-ACM-10001", "type": "text" },
+                { "key": "sku", "value": "CAM-4K-PRO", "type": "text" },
+                { "key": "product_name", "value": "4K Action Camera Pro", "type": "text" },
+                { "key": "serial_number", "value": "PM-RMA-SERIAL-001", "type": "text" },
+                { "key": "device_password", "value": "", "type": "text" },
+                { "key": "is_doa", "value": "false", "type": "text" },
+                { "key": "is_product_under_warranty", "value": "true", "type": "text" },
+                { "key": "cloud_status", "value": "SYNCED", "type": "text" },
+                { "key": "cloud_details", "value": "Cloud account removed.", "type": "text" },
+                { "key": "product_fault", "value": "Postman test fault.", "type": "text" },
+                { "key": "video_url", "value": "", "type": "text" },
+                { "key": "customer_tracking_number", "value": "PM-TRACK-001", "type": "text" },
+                { "key": "attachments", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bulk Add Repair Jobs",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/repairjobs/bulk",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "raJobData", "value": "[]", "type": "text" },
+                { "key": "attachments", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Serial Number Lookup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/serial-number-lookup",
+            "body": { "mode": "raw", "raw": "{\n  \"serial_number\": \"SN-CAM4K-0001\"\n}" }
+          }
+        },
+        {
+          "name": "Find Repair Job",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/find",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+          }
+        },
+        {
+          "name": "Update Tracking Number",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/tracking-number",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"tracking_number\": \"PM-TRACK-UPDATED\"\n}" }
+          }
+        },
+        {
+          "name": "Update SKU",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/sku",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"sku\": \"CAM-4K-PRO\",\n  \"product_name\": \"4K Action Camera Pro\"\n}" }
+          }
+        },
+        {
+          "name": "Update Serial Number",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/serial-number",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"serial_number\": \"SN-CAM4K-0001\"\n}" }
+          }
+        },
+        {
+          "name": "Update Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/status",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"status\": \"IN_PROGRESS\",\n  \"description\": \"Updated from Postman.\"\n}" }
+          }
+        },
+        {
+          "name": "Update Dispatch ID",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/dispatch-id",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"dispatch_id\": \"PM-DISP-001\"\n}" }
+          }
+        },
+        {
+          "name": "Receive Job",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobs/receive",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repair Job Costing",
+      "item": [
+        {
+          "name": "List Repair Job Costs",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobcost/list",
+            "body": { "mode": "raw", "raw": "{\n  \"repair_job_id\": {{repairJobId}}\n}" }
+          }
+        },
+        {
+          "name": "Add Repair Job Cost",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobcost/add",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repair_job_id\": {{repairJobId}},\n  \"cost_type\": \"LABOR\",\n  \"description\": \"Postman labor test\",\n  \"quantity\": 1,\n  \"unit_cost\": 55,\n  \"is_billable\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Repair Job Cost",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/repairjobcost/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{repairCostId}},\n  \"cost_type\": \"PART\",\n  \"description\": \"Postman cost update\",\n  \"quantity\": 1,\n  \"unit_cost\": 72,\n  \"is_billable\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "item": [
+        {
+          "name": "List Chat",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/chats/list",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+          }
+        },
+        {
+          "name": "Create Chat",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/chats/create",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "repair_job_id", "value": "{{repairJobId}}", "type": "text" },
+                { "key": "message", "value": "Postman chat message", "type": "text" },
+                { "key": "attachments", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark Chat Read",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/chats/toggle-read",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+          }
+        },
+        {
+          "name": "Unread Chat Count",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/chats/unread-count",
+            "body": { "mode": "raw", "raw": "{\n  \"repair_job_id\": {{repairJobId}}\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "item": [
+        {
+          "name": "List Comments",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/comments/list",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+          }
+        },
+        {
+          "name": "Create Comment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/comments/create",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "repair_job_id", "value": "{{repairJobId}}", "type": "text" },
+                { "key": "message", "value": "Postman repair comment", "type": "text" },
+                { "key": "attachments", "type": "file", "src": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Comment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/comments/update",
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{commentId}},\n  \"message\": \"Updated from Postman\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Summary Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/summary?startDate=2026-01-01&endDate=2026-12-31&organizationId={{organizationId}}" }
+        },
+        {
+          "name": "Backlog Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/backlog?organizationId={{organizationId}}&page=1&limit=20" }
+        },
+        {
+          "name": "Throughput Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/throughput?startDate=2026-01-01&endDate=2026-12-31&period=month" }
+        },
+        {
+          "name": "Cost Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/costs?startDate=2026-01-01&endDate=2026-12-31&limit=10" }
+        },
+        {
+          "name": "Product Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/products?startDate=2026-01-01&endDate=2026-12-31&limit=20" }
+        },
+        {
+          "name": "Customer Report",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/customers?startDate=2026-01-01&endDate=2026-12-31&limit=20" }
+        },
+        {
+          "name": "Summary Report POST",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/reports/summary",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startDate\": \"2026-01-01\",\n  \"endDate\": \"2026-12-31\",\n  \"organizationId\": {{organizationId}}\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

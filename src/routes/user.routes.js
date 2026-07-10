@@ -1,42 +1,46 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
+import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
 import { authRateLimit } from "../middlewares/rateLimit.middleware.js";
-import {loginUser,
-        registerUser, 
-        logoutUser, 
-        changeCurrentPassword,
-        activeUser,
-        getUserDetail, 
-        forgetPassword,
-        listUser,
-        getUserById,
-        updateUser,
-        //searchUser,
-        toggleStatus
-    } from "../controllers/user.controller.js"
+import {
+    activeUser,
+    changeCurrentPassword,
+    forgetPassword,
+    getUserById,
+    getUserDetail,
+    listUser,
+    loginUser,
+    logoutUser,
+    registerUser,
+    toggleStatus,
+    updateUser,
+} from "../controllers/user.controller.js";
 
+const router = Router();
+const INTERNAL_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN"];
+const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
+router.post("/login", authRateLimit, loginUser);
+router.get("/activeuser/:token", authRateLimit, activeUser);
+router.post("/getUserDetail", authRateLimit, getUserDetail);
+router.post("/forgetPassword/:token", authRateLimit, forgetPassword);
 
+router.use(verifyJWT);
 
-const router = Router()
+router.post("/logout", logoutUser);
+router.post("/change_password", authorizeRoles(INTERNAL_ROLES), changeCurrentPassword);
 
+router.post("/register", authorizeRoles(ADMIN_ROLES), registerUser);
+router.post("/list_user", authorizeRoles(ADMIN_ROLES), listUser);
+router.post("/user", authorizeRoles(ADMIN_ROLES), getUserById);
+router.put("/update_user", authorizeRoles(ADMIN_ROLES), updateUser);
+router.put("/toggle", authorizeRoles(ADMIN_ROLES), toggleStatus);
 
-router.route("/login").post(authRateLimit,loginUser)
-router.route("/activeuser/:token").get(authRateLimit,activeUser)
-router.route("/getUserDetail").post(authRateLimit,getUserDetail)
-router.route("/forgetPassword/:token").post(authRateLimit,forgetPassword)
+router.route("/")
+    .get(authorizeRoles(ADMIN_ROLES), listUser)
+    .post(authorizeRoles(ADMIN_ROLES), registerUser)
+    .put(authorizeRoles(ADMIN_ROLES), updateUser);
+router.post("/find", authorizeRoles(ADMIN_ROLES), getUserById);
+router.patch("/status", authorizeRoles(ADMIN_ROLES), toggleStatus);
 
-//Secure routes
-router.route("/logout").post(verifyJWT,logoutUser)
-router.route("/change_password").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]),changeCurrentPassword)
-
-//Authorised Routes
-router.route("/register").post(verifyJWT, authorizeRoles(["ADMIN","SUPER_ADMIN"]),registerUser)
-router.route("/list_user").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),listUser)
-router.route("/user").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),getUserById)
-router.route("/update_user").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateUser)
-//router.route("/search").post(verfiyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),searchUser)
-router.route("/toggle").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),toggleStatus)
-
-export default router
+export default router;

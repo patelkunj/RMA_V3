@@ -1,39 +1,59 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
-import {authorizeRoles} from "../middlewares/authorisation.middleware.js"
+import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 import { uploadRateLimit } from "../middlewares/rateLimit.middleware.js";
-import { 
-        listRepairJob, 
-        insertRepairJob,
-        updateRepairJobSKU,
-        updateRepairJobSerialNumber,
-        serialNumberLookup,
-        updateTrackingNumber,
-        updateStatus,
-        updateDispatchId,
-        insertMultipalReapirJob,
-        repairJob,
-        receiveJob
- } from "../controllers/repairjob.controller.js"
- import { upload } from "../middlewares/multer.middleware.js";
+import {
+    insertMultipalReapirJob,
+    insertRepairJob,
+    listRepairJob,
+    receiveJob,
+    repairJob,
+    serialNumberLookup,
+    updateDispatchId,
+    updateRepairJobSKU,
+    updateRepairJobSerialNumber,
+    updateStatus,
+    updateTrackingNumber,
+} from "../controllers/repairjob.controller.js";
 
-const router = Router()
+const router = Router();
+const INTERNAL_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN"];
+const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
+const CUSTOMER_VISIBLE_ROLES = ["ADMIN", "SUPER_ADMIN", "CUSTOMER"];
 
+router.use(verifyJWT);
 
-router.route("/add_multipal_repairjob").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),uploadRateLimit,upload.any(),insertMultipalReapirJob)
+router.post("/list_repairjob", listRepairJob);
+router.get("/", listRepairJob);
+router.post("/", authorizeRoles(ADMIN_ROLES), uploadRateLimit, upload.any(), insertRepairJob);
 
-//Secure routes
-router.route("/list_repairjob").post(verifyJWT,listRepairJob)
+router.post("/add_repairjob", authorizeRoles(ADMIN_ROLES), uploadRateLimit, upload.any(), insertRepairJob);
+router.post("/add_multipal_repairjob", authorizeRoles(ADMIN_ROLES), uploadRateLimit, upload.any(), insertMultipalReapirJob);
+router.post("/bulk", authorizeRoles(ADMIN_ROLES), uploadRateLimit, upload.any(), insertMultipalReapirJob);
 
-//Authorised Routes
-router.route("/updateTrackingNumber").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),updateTrackingNumber)
-router.route("/serial_number_lookup").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","CUSTOMER"]),serialNumberLookup)
-router.route("/add_repairjob").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),uploadRateLimit,upload.any(),insertRepairJob)
-router.route("/updateSKU").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateRepairJobSKU)
-router.route("/updateSerialNumber").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]),updateRepairJobSerialNumber)
-router.route("/updateStatus").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN"]), updateStatus)
-router.route("/updateDispatchId").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]), updateDispatchId)
-router.route("/repairJob").post(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]), repairJob)
-router.route("/receivejob").put(verifyJWT,authorizeRoles(["ADMIN","SUPER_ADMIN","TECHNICIAN"]), receiveJob)
+router.post("/serial_number_lookup", authorizeRoles(CUSTOMER_VISIBLE_ROLES), serialNumberLookup);
+router.post("/serial-number-lookup", authorizeRoles(CUSTOMER_VISIBLE_ROLES), serialNumberLookup);
 
-export default router
+router.put("/updateTrackingNumber", authorizeRoles(CUSTOMER_VISIBLE_ROLES), updateTrackingNumber);
+router.patch("/tracking-number", authorizeRoles(CUSTOMER_VISIBLE_ROLES), updateTrackingNumber);
+
+router.put("/updateSKU", authorizeRoles(ADMIN_ROLES), updateRepairJobSKU);
+router.patch("/sku", authorizeRoles(ADMIN_ROLES), updateRepairJobSKU);
+
+router.put("/updateSerialNumber", authorizeRoles(ADMIN_ROLES), updateRepairJobSerialNumber);
+router.patch("/serial-number", authorizeRoles(ADMIN_ROLES), updateRepairJobSerialNumber);
+
+router.put("/updateStatus", authorizeRoles(ADMIN_ROLES), updateStatus);
+router.patch("/status", authorizeRoles(ADMIN_ROLES), updateStatus);
+
+router.put("/updateDispatchId", authorizeRoles(INTERNAL_ROLES), updateDispatchId);
+router.patch("/dispatch-id", authorizeRoles(INTERNAL_ROLES), updateDispatchId);
+
+router.post("/repairJob", authorizeRoles(INTERNAL_ROLES), repairJob);
+router.post("/find", authorizeRoles(INTERNAL_ROLES), repairJob);
+
+router.put("/receivejob", authorizeRoles(INTERNAL_ROLES), receiveJob);
+router.patch("/receive", authorizeRoles(INTERNAL_ROLES), receiveJob);
+
+export default router;

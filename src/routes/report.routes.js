@@ -11,8 +11,9 @@ import {
 } from "../controllers/report.controller.js";
 
 const router = Router();
+const REPORT_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
-router.use(verifyJWT, authorizeRoles(["ADMIN", "SUPER_ADMIN"]));
+router.use(verifyJWT, authorizeRoles(REPORT_ROLES));
 
 router.route("/summary").get(getSummaryReport).post(getSummaryReport);
 router.route("/backlog").get(getBacklogReport).post(getBacklogReport);

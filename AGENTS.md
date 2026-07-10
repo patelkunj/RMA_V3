@@ -49,6 +49,29 @@ These rules apply to all automated coding agents working in this repository.
 - Add a 404 response for missing resources rather than leaking authorization details.
 - Avoid changing public response shapes unless necessary; document any breaking changes.
 
+## Code Structure Rules
+
+- Keep controllers thin. Controllers should handle request parsing, response formatting, and calling service functions; business rules and Prisma queries should live in `src/services/`.
+- Add one service module per business area, for example `src/services/customer.service.js`, `src/services/repairjob.service.js`, or `src/services/report.service.js`.
+- Keep shared validation, parsing, formatting, and access helpers in `src/utils/`; do not duplicate helper logic inside controllers.
+- Do not introduce or re-create legacy hand-written model classes. Prisma is the data access layer.
+- Prefer transactions inside services when a use case writes multiple related records, audit logs, documents, notifications, or cost rows.
+- Keep route files focused on URL definitions and middleware composition only; do not add business logic in route files.
+- Keep file naming consistent: route files use `*.routes.js`, controllers use `*.controller.js`, services use `*.service.js`, middleware uses `*.middleware.js`, and tests use `*.test.js`.
+
+## Router Rules
+
+- Use `Router()` from Express and export one default router per route file.
+- Define role constants near the top of each route file, for example `ADMIN_ROLES`, `INTERNAL_ROLES`, or `CUSTOMER_VISIBLE_ROLES`.
+- Use `router.use(verifyJWT, authorizeRoles(...))` when all routes in a file share the same protection. Apply route-level middleware only when roles differ per endpoint.
+- Keep public auth endpoints explicitly rate limited with `authRateLimit`.
+- Keep upload endpoints protected with `verifyJWT`, `authorizeRoles`, `uploadRateLimit`, and multer middleware in that order.
+- Put static routes before dynamic parameter routes, for example `/status` before `/:id`.
+- Prefer REST-style routes for new endpoints, such as `GET /`, `POST /`, `PUT /`, `PATCH /status`, and `POST /search`.
+- Preserve existing legacy route paths unless the user explicitly approves a breaking change. When improving names, add a cleaner alias and keep the old path temporarily.
+- Do not add GET routes that require request-body fields. Refactor the controller/service to read `req.params` or `req.query` first.
+- Keep route naming lowercase and kebab-case for new paths, for example `/serial-number-lookup` rather than `/serial_number_lookup` or `/updateSerialNumber`.
+
 ## File Upload Rules
 
 - Use multer middleware on upload routes.
@@ -73,4 +96,3 @@ These rules apply to all automated coding agents working in this repository.
 - Keep `.env.example` updated when adding required environment variables.
 - Do not commit `.env` or secrets.
 - Ensure CI runs `npm run verify`.
-
