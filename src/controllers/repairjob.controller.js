@@ -2,8 +2,6 @@ import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import moment from "moment"
-import { Email } from "../utils/Email.js"
-import { signupEmailTempate } from "../templates/signup.templates.js"
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -17,13 +15,13 @@ import {
     isSuperAdmin,
 } from "../utils/accessControl.js";
 import { logger } from "../utils/logger.js";
+import { sendRepairJobStatusEmailSafely } from "../services/email.service.js";
 import prisma from "../db/prisma.js"
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const JOB_STATUSES = new Set(["CREATED", "RECEIVED", "IN_PROGRESS", "WAITING_PARTS", "COMPLETED", "CANCELLED"]);
-const appUrl = () => process.env.APP_URL || "http://localhost:3000";
 
 const getDocumentType = (fileName) => {
     const extension = fileName.toLowerCase();
@@ -244,19 +242,7 @@ const insertRepairJob = asyncHandler(async (req, res) => {
         // Attempt to send email
         try {
 
-            if(req.customer){
-                await new Email().send(
-                    req.customer?.email,
-                    `${job_id} created successfully`,
-                    signupEmailTempate(`${appUrl()}/api/v1/repairjobs/repairJob`)
-                );
-            }else{
-                await new Email().send(
-                    email,
-                    `${job_id} created successfully`,
-                    signupEmailTempate(`${appUrl()}/api/v1/repairjobs/repairJob`)
-                );
-            }
+            await sendRepairJobStatusEmailSafely(createdRepairJob.id);
 
         } catch (emailError) {
             logger.error("Email sending failed:", emailError);
@@ -503,6 +489,7 @@ const updateStatus = asyncHandler(async (req, res) => {
                 },
             }),
         ]);
+        await sendRepairJobStatusEmailSafely(repairjob.id);
         return res.status(200).json(new ApiResponse(200, repairjob, " Status updated successfaully."))
     } catch (error) {
         return res.status(400).json(new ApiError(400, "Error while updating status"))
@@ -548,6 +535,7 @@ const updateDispatchId = asyncHandler(async (req, res) => {
                 changedBy: Number(req.user?.id),
             },
         });
+        await sendRepairJobStatusEmailSafely(repairjob.id);
         return res.status(200).json(new ApiResponse(200, repairjob, " Dispatch ID updated successfaully."))
 
     } catch (error) {
@@ -601,6 +589,7 @@ const receiveJob = asyncHandler(async (req, res) => {
             },
         });
 
+        await sendRepairJobStatusEmailSafely(repairjob.id);
         const updateJob = await prisma.repairJob.findUnique({ where: { id: Number(id) } });
         return res.status(200).json(new ApiResponse(200, updateJob, " Job is received successfaally."))
 
@@ -822,11 +811,7 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
 
             // Attempt to send email
             try {
-                await new Email().send(
-                    Jobdata.email,
-                    `${job_id} created successfully`,
-                    signupEmailTempate(`${appUrl()}/api/v1/repairjobs/repairJob`)
-                );
+                await sendRepairJobStatusEmailSafely(createdRepairJob.id);
             } catch (emailError) {
                 logger.error("Email sending failed:", emailError);
                 log.description += ` (Email sending failed: ${emailError.message})`;

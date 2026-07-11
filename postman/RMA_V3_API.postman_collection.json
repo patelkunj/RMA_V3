@@ -799,7 +799,7 @@
           "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/notifications?page=1&limit=20" }
         },
         {
-          "name": "Create Notification",
+          "name": "Create Manual Admin Notification",
           "event": [
             {
               "listen": "test",
@@ -815,10 +815,10 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/notifications",
+            "url": "{{baseUrl}}/api/v1/notifications/admin",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"recipientType\": \"USER\",\n  \"recipientId\": {{userId}},\n  \"referenceType\": \"repair_job\",\n  \"referenceId\": {{repairJobId}},\n  \"title\": \"Postman notification\",\n  \"message\": \"Notification created from Postman collection.\"\n}"
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"recipientType\": \"USER\",\n  \"recipientId\": {{userId}},\n  \"referenceType\": \"REPAIR_JOB\",\n  \"referenceId\": {{repairJobId}},\n  \"title\": \"Postman notification\",\n  \"message\": \"Notification created from Postman collection.\"\n}"
             }
           }
         },
@@ -937,6 +937,10 @@
         {
           "name": "Invoice PDF",
           "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/invoice/{{repairJobId}}.pdf" }
+        },
+        {
+          "name": "Email Invoice PDF",
+          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/reports/invoice/{{repairJobId}}/email" }
         },
         {
           "name": "Summary Report POST",

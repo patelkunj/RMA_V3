@@ -1,7 +1,7 @@
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
-    createNotification,
+    createManualNotification,
     listAllNotifications,
     listNotifications,
     markNotificationRead,
@@ -18,8 +18,8 @@ const listAll = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, data, "Notifications fetched successfully."));
 });
 
-const create = asyncHandler(async (req, res) => {
-    const notification = await createNotification(req, req.body);
+const createManual = asyncHandler(async (req, res) => {
+    const notification = await createManualNotification(req, req.body);
     return res.status(201).json(new ApiResponse(201, notification, "Notification created successfully."));
 });
 
@@ -34,7 +34,7 @@ const unreadCount = asyncHandler(async (req, res) => {
 });
 
 export {
-    create,
+    createManual,
     listAll,
     listMine,
     markRead,

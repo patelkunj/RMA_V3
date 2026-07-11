@@ -3,9 +3,11 @@ import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import moment from "moment"
 import bcrypt from "bcrypt"
-import { Email } from "../utils/Email.js"
-import {signupEmailTempate} from "../templates/signup.templates.js"
-import {resetPasswordTempate} from "../templates/resetPassword.template.js"
+import {
+    buildPasswordResetUrl,
+    sendAccountActivationEmail,
+    sendPasswordResetEmail,
+} from "../services/email.service.js";
 import {generateRandomString, diffTwoDateTime} from "../utils/common.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
 import {
@@ -185,7 +187,11 @@ const registerCustomer = asyncHandler(async (req,res) => {
 
 
                 //send email for active the account.
-                const emailSend = await new Email().send(customer.email,"RMA Service online account activation", signupEmailTempate(activationUrl(`/api/v1/customers/activecustomer/${activationToken}`))) 
+                const emailSend = await sendAccountActivationEmail({
+                    to: customer.email,
+                    name: customer.contactPersonName || customer.companyName,
+                    activationUrl: activationUrl(`/api/v1/customers/activecustomer/${activationToken}`),
+                });
                 
                 log.logStatus =  "Successful";
                 await prisma.systemLog.create({data:log})
@@ -534,7 +540,14 @@ const getCustomerDetail = asyncHandler( async (req, res) =>{
 
             if(updateCustomer){
 
-                const emailSend = await new Email().send(customer.email,"Reset Password", resetPasswordTempate(activationUrl(`/api/v1/customers/forgetPassword/${passwordResetToken}`))) 
+                const emailSend = await sendPasswordResetEmail({
+                    to: customer.email,
+                    name: customer.contactPersonName || customer.companyName,
+                    resetUrl: buildPasswordResetUrl({
+                        token: passwordResetToken,
+                        accountType: "customer",
+                    }),
+                });
     
                 if(emailSend){
                     return res.status(201).json(new ApiResponse(200, updateCustomer, " email send to user for reset password"))

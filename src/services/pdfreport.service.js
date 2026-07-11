@@ -77,7 +77,7 @@ const serviceReportPdf = async (req, repairJobId) => {
     return createPdfBuffer(lines);
 };
 
-const invoicePdf = async (req, repairJobId) => {
+const getInvoiceData = async (req, repairJobId) => {
     const job = await getRepairJobReportData(req, repairJobId);
     const subtotal = job.costings
         .filter((cost) => cost.costType !== "TAX")
@@ -99,8 +99,9 @@ const invoicePdf = async (req, repairJobId) => {
             total: Number(cost.customerCharge || 0),
         }));
 
-    return createInvoicePdfBuffer({
+    return {
         invoiceNumber: job.raJobId || `RMA-${job.id}`,
+        jobNumber: job.raJobId || `RMA-${job.id}`,
         issueDate: dateOnly(invoiceDate),
         dueDate: dateOnly(dueDate),
         organization: job.organization,
@@ -115,10 +116,16 @@ const invoicePdf = async (req, repairJobId) => {
             accountNumber: process.env.INVOICE_ACCOUNT_NUMBER || job.organization?.email || "",
         },
         signatureName: process.env.INVOICE_SIGNATURE_NAME || job.organization?.name || "",
-    });
+    };
+};
+
+const invoicePdf = async (req, repairJobId) => {
+    const invoice = await getInvoiceData(req, repairJobId);
+    return createInvoicePdfBuffer(invoice);
 };
 
 export {
+    getInvoiceData,
     invoicePdf,
     serviceReportPdf,
 };

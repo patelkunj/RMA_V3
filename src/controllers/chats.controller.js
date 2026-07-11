@@ -2,121 +2,28 @@ import prisma from "../db/prisma.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { moveUploadedFiles } from "../utils/fileUpload.js";
-import { generateRandomString } from "../utils/common.js";
-
-const getDocumentType = (fileName) => {
-    const extension = fileName.toLowerCase();
-
-    if (
-        extension.endsWith(".jpg") ||
-        extension.endsWith(".jpeg") ||
-        extension.endsWith(".png") ||
-        extension.endsWith(".webp")
-    ) {
-        return "IMAGE";
-    }
-
-    if (extension.endsWith(".pdf")) {
-        return "PDF";
-    }
-
-    if (extension.endsWith(".doc") || extension.endsWith(".docx")) {
-        return "DOC";
-    }
-
-    return "OTHER";
-};
+import { sendChatMessage } from "../services/chat.service.js";
 
 const insertChat = asyncHandler(async (req, res) => {
-    try {
+    const { repair_job_id, message } = req.body;
 
-        const { repair_job_id, message } = req.body;
-
-        if (!repair_job_id) {
-            throw new ApiError(400, "Repair job id is required.");
-        }
-
-        if (!message?.trim() && !req.files?.length) {
-            throw new ApiError(400, "Message or attachment is required.");
-        }
-
-        const senderId = req.user?.id || req.customer?.id;
-        const senderRole = req.user?.id ? "USER" : "CUSTOMER";
-
-        if (!senderId) {
-            throw new ApiError(401, "Unauthorized sender.");
-        }
-
-        const repairJob = await prisma.repairJob.findUnique({
-            where: { id: Number(repair_job_id) },
-            select: { id: true },
-        });
-
-        if (!repairJob) {
-            throw new ApiError(404, "Repair job not found.");
-        }
-
-        let chat = null;
-
-        if (message?.trim()) {
-
-            chat = await prisma.chat.create({
-                data: {
-                    repairJobId: Number(repair_job_id),
-                    senderId,
-                    senderRole,
-                    message: message.trim()
-                }
-            });
-
-            if (!chat) {
-                throw new ApiError(400, "Chat couldn't be inserted.");
-            }
-        }
-
-        if (req.files?.length > 0) {
-
-            const uploadFiles = await moveUploadedFiles(req.files, repair_job_id, "chat");
-
-            for (const file of uploadFiles) {
-                await prisma.document.create({
-                    data: {
-                        repairJobId: Number(repair_job_id),
-                        relatedType: "chat",
-                        relatedId: chat?.id || 0,
-                        documentName: file,
-                        documentUrl: `/uploads/${repair_job_id}/chat/${file}`,
-                        documentType: getDocumentType(file),
-                        uploadedBy: senderId,
-                        uploadedRole: req.user?.role || req.customer?.role,
-                        fileHash: generateRandomString(15)
-                    }
-                });
-            }
-        }
-
-        await prisma.Notification.create({
-            data: {
-                repairJobId: Number(repair_job_id),
-                notificationType: "CHAT",
-                message: `New chat message from ${senderRole.toLowerCase()}.`,
-                isRead: false,
-                createdBy: senderId,
-                createdRole: senderRole
-            }
-        });
-
-        return res
-            .status(200)
-            .json(new ApiResponse(200, chat, "Chat sent successfully."));
-
-    } catch (error) {
-        throw new ApiError(
-            400,
-            `Error while inserting chat. ${error?.message}`
-        );
+    if (!repair_job_id) {
+        throw new ApiError(400, "Repair job id is required.");
     }
+
+    if (!message?.trim() && !req.files?.length) {
+        throw new ApiError(400, "Message or attachment is required.");
+    }
+
+    const chat = await sendChatMessage(req, {
+        repairJobId: repair_job_id,
+        message,
+        files: req.files,
+    });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, chat, "Chat sent successfully."));
 });
 
 const listChat = asyncHandler(async (req, res) => {

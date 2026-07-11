@@ -3,10 +3,12 @@ import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import moment from "moment"
 import bcrypt from "bcrypt"
-import { Email } from "../utils/Email.js"
-import {signupEmailTempate} from "../templates/signup.templates.js"
 import {generateRandomString, diffTwoDateTime} from "../utils/common.js"
-import {resetPasswordTempate} from "../templates/resetPassword.template.js"
+import {
+    buildPasswordResetUrl,
+    sendAccountActivationEmail,
+    sendPasswordResetEmail,
+} from "../services/email.service.js";
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
 import { assertStrongPassword, assertValidEmail, normalizeEmail } from "../utils/validation.js";
 import { logger } from "../utils/logger.js";
@@ -141,7 +143,11 @@ const registerUser = asyncHandler(async (req,res) => {
             // check for user creation
             if(user){
                 //send email for active the account.
-                const emailSend = await new Email().send(user.email,"RMA Service online account activation", signupEmailTempate(activationUrl(`/api/v1/users/activeuser/${activationToken}`))) 
+                const emailSend = await sendAccountActivationEmail({
+                    to: user.email,
+                    name: `${user.firstName} ${user.lastName}`,
+                    activationUrl: activationUrl(`/api/v1/users/activeuser/${activationToken}`),
+                });
                 
                 log.logStatus =  "Successful";
                 await prisma.systemLog.create({data:log})
@@ -489,7 +495,14 @@ const getUserDetail = asyncHandler( async (req, res) =>{
             }
 
             if(updateUser){
-                const emailSend = await new Email().send(updateUser.email,"Reset Password", resetPasswordTempate(activationUrl(`/api/v1/users/forgetPassword/${passwordResetToken}`))) 
+                const emailSend = await sendPasswordResetEmail({
+                    to: updateUser.email,
+                    name: `${updateUser.firstName} ${updateUser.lastName}`,
+                    resetUrl: buildPasswordResetUrl({
+                        token: passwordResetToken,
+                        accountType: "user",
+                    }),
+                });
                 
                 if(emailSend){
                     log.logStatus =  "Successful";

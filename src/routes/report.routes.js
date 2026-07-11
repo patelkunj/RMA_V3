@@ -10,6 +10,7 @@ import {
     getThroughputReport,
 } from "../controllers/report.controller.js";
 import {
+    emailInvoice,
     invoice,
     serviceReport,
 } from "../controllers/pdfreport.controller.js";
@@ -17,9 +18,11 @@ import {
 const router = Router();
 const REPORT_ROLES = ["ADMIN", "SUPER_ADMIN"];
 const JOB_PDF_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN", "CUSTOMER"];
+const BILLING_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
 router.get("/service-report/:repairJobId.pdf", verifyJWT, authorizeRoles(JOB_PDF_ROLES), serviceReport);
 router.get("/invoice/:repairJobId.pdf", verifyJWT, authorizeRoles(JOB_PDF_ROLES), invoice);
+router.post("/invoice/:repairJobId/email", verifyJWT, authorizeRoles(BILLING_ROLES), emailInvoice);
 router.post("/service-report", verifyJWT, authorizeRoles(JOB_PDF_ROLES), serviceReport);
 router.post("/invoice", verifyJWT, authorizeRoles(JOB_PDF_ROLES), invoice);
 

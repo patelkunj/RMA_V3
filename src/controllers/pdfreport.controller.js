@@ -3,6 +3,8 @@ import {
     invoicePdf,
     serviceReportPdf,
 } from "../services/pdfreport.service.js";
+import { sendBillingInvoiceEmail } from "../services/email.service.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 const sendPdf = (res, buffer, filename) => {
     res.setHeader("Content-Type", "application/pdf");
@@ -23,7 +25,14 @@ const invoice = asyncHandler(async (req, res) => {
     return sendPdf(res, buffer, `invoice-${repairJobId}.pdf`);
 });
 
+const emailInvoice = asyncHandler(async (req, res) => {
+    const repairJobId = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id;
+    const result = await sendBillingInvoiceEmail(req, repairJobId);
+    return res.status(200).json(new ApiResponse(200, result, "Invoice emailed successfully."));
+});
+
 export {
+    emailInvoice,
     invoice,
     serviceReport,
 };

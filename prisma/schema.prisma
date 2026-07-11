@@ -69,6 +69,16 @@ enum SenderType {
   SYSTEM
 }
 
+enum NotificationRecipientType {
+  USER
+  CUSTOMER
+}
+
+enum NotificationReferenceType {
+  CHAT
+  REPAIR_JOB
+}
+
 enum DocumentType {
   IMAGE
   PDF
@@ -97,8 +107,8 @@ model Organization {
   products          Product[]
   productSerials    ProductSerial[]
   notifications     Notification[]
-  
-  @@unique([email,name])
+
+  @@unique([email, name])
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -171,7 +181,7 @@ model Customer {
   email                String
   password             String
   contactPersonName    String? // Fixed: was contactPerson_name (mixed case)
-  contactPersonEmail    String?
+  contactPersonEmail   String?
   mobile               String?
   role                 String       @default("CUSTOMER")
   returnAddress        String?
@@ -412,21 +422,21 @@ model Document {
 // ─── Notification ────────────────────────────────────────────────────────────
 
 model Notification {
-  id             Int          @id @default(autoincrement())
+  id             Int                       @id @default(autoincrement())
   organizationId Int
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  recipientType  String
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recipientType  NotificationRecipientType
   recipientId    Int
-  referenceType  String
+  referenceType  NotificationReferenceType
   referenceId    Int
   title          String
   message        String
-  isRead         Boolean      @default(false)
-  createdDate    DateTime     @default(now())
+  isRead         Boolean                   @default(false)
+  createdDate    DateTime                  @default(now())
 
-  // Composite index supports: "unread notifications for recipient X"
   @@index([recipientType, recipientId, isRead])
-  @@index([referenceType, referenceId]) // Added: look up notifications by source entity
+  @@index([organizationId, createdDate])
+  @@index([referenceType, referenceId])
 }
 
 // ─── SystemLog ───────────────────────────────────────────────────────────────
@@ -443,13 +453,13 @@ model SystemLog {
 // ─── SessionManagement ───────────────────────────────────────────────────────
 
 model SessionManagement {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   userId       Int
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   ipAddress    String?
   refreshToken String
   expiresAt    DateTime? // Fixed: was expires_at (snake_case)
-  createdDate  DateTime @default(now())
+  createdDate  DateTime  @default(now())
 
   @@index([userId]) // Added: session lookup by user on every auth request
 }

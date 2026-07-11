@@ -2,7 +2,7 @@ import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
 import {
-    create,
+    createManual,
     listAll,
     listMine,
     markRead,
@@ -19,11 +19,13 @@ router.get("/", listMine);
 router.post("/list", listMine);
 router.get("/unread-count", unreadCount);
 router.post("/unread-count", unreadCount);
-router.patch("/:id/read", markRead);
 router.patch("/read", markRead);
 
 router.get("/admin/all", authorizeRoles(ADMIN_ROLES), listAll);
 router.post("/admin/list", authorizeRoles(ADMIN_ROLES), listAll);
-router.post("/", authorizeRoles(ADMIN_ROLES), create);
+router.post("/admin", authorizeRoles(ADMIN_ROLES), createManual);
+// Legacy manual endpoint. Chat notifications are generated internally.
+router.post("/", authorizeRoles(ADMIN_ROLES), createManual);
+router.patch("/:id/read", markRead);
 
 export default router;

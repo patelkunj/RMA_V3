@@ -238,11 +238,14 @@ Reports support query or body filters such as:
 New supporting API areas:
 
 - `/api/v1/sessions`: refresh user access tokens, list sessions, revoke one session, or revoke all sessions.
-- `/api/v1/notifications`: list the signed-in recipient's notifications, create admin notifications, mark read, and fetch unread count.
+- `/api/v1/notifications`: list the signed-in recipient's notifications, create manual admin notifications, mark read, and fetch unread count. Chat notifications are generated automatically when a chat message or attachment is created.
 - `/api/v1/documents`: list, inspect, download, and deactivate repair-job documents with repair-job access checks.
 - `/api/v1/repairjob-timeline`: fetch repair-job audit logs and status tracking history.
 - `/api/v1/reports/service-report/:repairJobId.pdf`: download a repair-job service report PDF.
 - `/api/v1/reports/invoice/:repairJobId.pdf`: download a repair-job invoice PDF.
+- `POST /api/v1/reports/invoice/:repairJobId/email`: email the customer a billing message with the generated PDF invoice attached (Admin/Super Admin).
+
+Account activation, password reset, repair-status, and billing emails share the responsive RMA email layout in `src/templates/email.templates.js`. Set `CUSTOMER_PORTAL_URL` for repair-job links and configure the `EMAIL_*` and `INVOICE_*` variables documented in `.env.example`.
 
 ## Code Conventions
 
