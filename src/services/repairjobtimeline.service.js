@@ -22,6 +22,7 @@ const listAuditLogs = async (req, repairJobId) => {
     return prisma.repairJobAuditLog.findMany({
         where: { repairJobId: Number(repairJobId) },
         orderBy: { performedAt: "desc" },
+        take: 200,
     });
 };
 
@@ -55,6 +56,7 @@ const listTracking = async (req, repairJobId) => {
     return prisma.repairJobTracking.findMany({
         where: { repairJobId: Number(repairJobId) },
         orderBy: { changedDate: "desc" },
+        take: 200,
         include: {
             changedByUser: {
                 select: {

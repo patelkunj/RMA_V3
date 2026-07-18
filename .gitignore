@@ -73,6 +73,7 @@ web_modules/
 # Runtime uploads
 public/temp/
 public/uploads/
+var/private-uploads/
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

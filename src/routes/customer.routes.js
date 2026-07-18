@@ -23,6 +23,7 @@ const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
 router.post("/login", authRateLimit, loginCustomer);
 router.get("/activecustomer/:token", authRateLimit, activeCustomer);
+router.post("/password-reset/request", authRateLimit, getCustomerDetail);
 router.post("/getCustomerDetail", authRateLimit, getCustomerDetail);
 router.post("/forgetPassword/:token", authRateLimit, forgetPassword);
 

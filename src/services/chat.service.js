@@ -1,8 +1,7 @@
 import prisma from "../db/prisma.js";
 import { createChatNotifications } from "./notification.service.js";
 import { ensureRepairJobAccess } from "../utils/accessControl.js";
-import { generateRandomString } from "../utils/common.js";
-import { moveUploadedFiles } from "../utils/fileUpload.js";
+import { removeStoredFiles, storeUploadedFiles } from "../utils/fileUpload.js";
 
 const getDocumentType = (fileName) => {
     const extension = fileName.toLowerCase();
@@ -26,10 +25,11 @@ const sendChatMessage = async (req, { repairJobId, message, files = [] }) => {
     const senderRole = req.user?.role || req.customer?.role;
     const normalizedMessage = String(message ?? "").trim();
     const uploadedFiles = files.length
-        ? await moveUploadedFiles(files, jobId, "chat")
+        ? await storeUploadedFiles(files, jobId, "chat")
         : [];
 
-    return prisma.$transaction(async (transaction) => {
+    try {
+        return await prisma.$transaction(async (transaction) => {
         const repairJob = await transaction.repairJob.findUnique({
             where: { id: jobId },
             select: {
@@ -56,12 +56,12 @@ const sendChatMessage = async (req, { repairJobId, message, files = [] }) => {
                     repairJobId: jobId,
                     relatedType: "chat",
                     relatedId: chat.id,
-                    documentName: file,
-                    documentUrl: `/uploads/${jobId}/chat/${file}`,
-                    documentType: getDocumentType(file),
+                    documentName: file.name,
+                    documentUrl: file.reference,
+                    documentType: getDocumentType(file.name),
                     uploadedBy: senderId,
                     uploadedRole: senderRole,
-                    fileHash: generateRandomString(15),
+                    fileHash: file.hash,
                 })),
             });
         }
@@ -74,7 +74,11 @@ const sendChatMessage = async (req, { repairJobId, message, files = [] }) => {
         });
 
         return chat;
-    });
+        });
+    } catch (error) {
+        await removeStoredFiles(uploadedFiles);
+        throw error;
+    }
 };
 
 export { sendChatMessage };

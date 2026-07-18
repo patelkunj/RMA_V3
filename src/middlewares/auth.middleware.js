@@ -13,10 +13,13 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
             return res.status(401).json(new ApiError(401, "Unauthorized request"));
         }
 
-        const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+        const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
+            issuer: process.env.JWT_ISSUER || "rma-backend",
+            audience: process.env.JWT_AUDIENCE || "rma-api",
+        });
 
-        // Try User first
-        const user = await prisma.user.findUnique({
+        const shouldTryUser = !decodedToken.actorType || decodedToken.actorType === "USER";
+        const user = shouldTryUser ? await prisma.user.findUnique({
             where: {
                 id: decodedToken?.id,
                 email: decodedToken?.email,
@@ -30,7 +33,7 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
                 isActive: true,
                 isLocked: true,
             },
-        });
+        }) : null;
 
         if (user) {
             if (!user.isActive || user.isLocked) {
@@ -43,7 +46,11 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
             return next();
         }
 
-        // Fall back to Customer
+        if (decodedToken.actorType && decodedToken.actorType !== "CUSTOMER") {
+            return res.status(401).json(new ApiError(401, "Invalid Access Token"));
+        }
+
+        // Fall back to Customer for legacy tokens or use the explicit actor type.
         const customer = await prisma.customer.findFirst({
             where: {
                 id: decodedToken?.id,

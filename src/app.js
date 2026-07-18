@@ -7,6 +7,11 @@ import { securityHeaders } from "./middlewares/security.middleware.js";
 import { apiRateLimit } from "./middlewares/rateLimit.middleware.js";
 import { activityLogger } from "./middlewares/activityLogger.middleware.js";
 import { logger } from "./utils/logger.js";
+import { metricsMiddleware } from "./utils/metrics.js";
+import operationalRouter from "./routes/operational.routes.js";
+import { verifyCsrf } from "./middlewares/csrf.middleware.js";
+import openapiRouter from "./routes/openapi.routes.js";
+import { sanitizeRequestPath } from "./utils/requestSanitizer.js";
 dotenv.config();
 
 const app = express();
@@ -24,6 +29,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
 
 app.use(securityHeaders);
 app.use(activityLogger);
+app.use(metricsMiddleware);
 
 app.use(cors({
     origin(origin, callback) {
@@ -35,15 +41,13 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(apiRateLimit);
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(express.static("public", {
-    dotfiles: "deny",
-    index: false,
-    maxAge: process.env.NODE_ENV === "production" ? "1d" : 0,
-}));
 app.use(cookieParser());
+app.use(verifyCsrf);
+app.use(operationalRouter);
+app.use("/api-docs", openapiRouter);
+app.use(apiRateLimit);
 
 
 //routes
@@ -61,6 +65,13 @@ import notificationRouter from "./routes/notification.routes.js";
 import documentRouter from "./routes/document.routes.js";
 import repairJobTimelineRouter from "./routes/repairjobtimeline.routes.js";
 import sessionRouter from "./routes/session.routes.js";
+import inventoryRouter from "./routes/inventory.routes.js";
+import logisticsRouter from "./routes/logistics.routes.js";
+import billingRouter from "./routes/billing.routes.js";
+import organizationSettingsRouter from "./routes/organizationSettings.routes.js";
+import integrationRouter from "./routes/integration.routes.js";
+import privacyRouter from "./routes/privacy.routes.js";
+import mfaRouter from "./routes/mfa.routes.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/customers", customerRouter);
@@ -77,6 +88,13 @@ app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/documents", documentRouter);
 app.use("/api/v1/repairjob-timeline", repairJobTimelineRouter);
 app.use("/api/v1/sessions", sessionRouter);
+app.use("/api/v1/inventory", inventoryRouter);
+app.use("/api/v1/shipments", logisticsRouter);
+app.use("/api/v1/billing", billingRouter);
+app.use("/api/v1/organization-settings", organizationSettingsRouter);
+app.use("/api/v1/integrations", integrationRouter);
+app.use("/api/v1/privacy", privacyRouter);
+app.use("/api/v1/mfa", mfaRouter);
 
 app.use((req, res) => {
     return res.status(404).json(new ApiError(404, "Route not found"));
@@ -91,7 +109,7 @@ app.use((err, req, res, next) => {
     logger.error("request_error", {
         requestId: req.id,
         method: req.method,
-        path: req.originalUrl || req.url,
+        path: sanitizeRequestPath(req.originalUrl || req.url),
         statusCode,
         error: err,
     });

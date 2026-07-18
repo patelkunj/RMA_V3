@@ -1,13 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import { ApiError } from "../utils/ApiError.js";
 import { ensureRepairJobAccess } from "../utils/accessControl.js";
 import prisma from "../db/prisma.js";
+import { getPrivateObject, keyFromReference } from "./objectStorage.service.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicDir = path.resolve(__dirname, "../../public");
+const publicDir = path.resolve("public");
 
 const documentSelect = {
     id: true,
@@ -39,6 +37,8 @@ const listDocuments = async (req, filters = {}) => {
             ...(filters.isActive === undefined ? {} : { isActive: filters.isActive === true || filters.isActive === "true" }),
         },
         orderBy: { uploadedDate: "desc" },
+        skip: (Math.max(Number(filters.page) || 1, 1) - 1) * Math.min(Math.max(Number(filters.limit) || 50, 1), 100),
+        take: Math.min(Math.max(Number(filters.limit) || 50, 1), 100),
         select: documentSelect,
     });
 };
@@ -71,21 +71,31 @@ const deactivateDocument = async (req, documentId) => {
     });
 };
 
-const resolveDocumentPath = async (req, documentId) => {
+const resolveDocumentDownload = async (req, documentId) => {
     const document = await getDocumentForAccess(req, documentId);
+    const objectKey = keyFromReference(document.documentUrl);
+    if (objectKey) {
+        const stored = await getPrivateObject(objectKey);
+        if (document.fileHash && stored.hash !== document.fileHash) throw new ApiError(409, "Document failed its integrity check.");
+        return { document, buffer: stored.buffer, contentType: stored.contentType };
+    }
+
+    // Backward-compatible read path for files created before object storage was enabled.
     const relativePath = document.documentUrl.replace(/^\/+/, "");
     const filePath = path.resolve(publicDir, relativePath.replace(/^public\/?/, ""));
 
-    if (!filePath.startsWith(publicDir) || !fs.existsSync(filePath)) {
+    const relativeToPublic = path.relative(publicDir, filePath);
+    if (relativeToPublic.startsWith("..") || path.isAbsolute(relativeToPublic) || !fs.existsSync(filePath)) {
         throw new ApiError(404, "Document file not found.");
     }
 
-    return { document, filePath };
+    const buffer = await fs.promises.readFile(filePath);
+    return { document, buffer, contentType: "application/octet-stream" };
 };
 
 export {
     deactivateDocument,
     getDocumentForAccess,
     listDocuments,
-    resolveDocumentPath,
+    resolveDocumentDownload,
 };

@@ -1,13 +1,9 @@
 import { randomUUID } from "crypto";
 import { logger } from "../utils/logger.js";
+import { sanitizeRequestPath } from "../utils/requestSanitizer.js";
 
 const getClientIp = (req) => {
-    const forwardedFor = req.headers["x-forwarded-for"];
-    const forwardedIp = Array.isArray(forwardedFor)
-        ? forwardedFor[0]
-        : forwardedFor?.split(",")[0]?.trim();
-
-    return forwardedIp || req.ip || req.socket?.remoteAddress || "unknown";
+    return req.ip || req.socket?.remoteAddress || "unknown";
 };
 
 const getActor = (req) => {
@@ -50,7 +46,7 @@ const activityLogger = (req, res, next) => {
         logger[level]("http_request", {
             requestId: req.id,
             method: req.method,
-            path: req.originalUrl || req.url,
+            path: sanitizeRequestPath(req.originalUrl || req.url),
             statusCode,
             durationMs: Number(durationMs.toFixed(2)),
             ip: getClientIp(req),

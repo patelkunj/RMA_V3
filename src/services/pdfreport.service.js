@@ -5,7 +5,9 @@ import {
     createPdfBuffer,
 } from "../utils/pdf.js";
 import prisma from "../db/prisma.js";
-import dotenv from "dotenv";
+import { readTaxRate } from "../config/env.js";
+import { loadOrganizationLogoForPdf } from "./organization.service.js";
+import { calculateTax, sumMoney } from "../utils/money.js";
 
 const dateOnly = (value) => value ? new Date(value).toISOString().slice(0, 10) : "";
 const addDays = (value, days) => {
@@ -44,7 +46,9 @@ const getRepairJobReportData = async (req, repairJobId) => {
 
 const serviceReportPdf = async (req, repairJobId) => {
     const job = await getRepairJobReportData(req, repairJobId);
+    const logo = await loadOrganizationLogoForPdf(job.organization);
     const lines = [
+        ...(logo ? [{ type: "image", source: logo.buffer, width: 150, height: 70 }] : []),
         { text: "Service Report", size: 18, leading: 24 },
         { text: `RA Job: ${job.raJobId || job.id}`, size: 12 },
         { type: "space", size: 8 },
@@ -79,11 +83,46 @@ const serviceReportPdf = async (req, repairJobId) => {
 
 const getInvoiceData = async (req, repairJobId) => {
     const job = await getRepairJobReportData(req, repairJobId);
-    const subtotal = job.costings
+    const logo = await loadOrganizationLogoForPdf(job.organization);
+    const persistedInvoice = await prisma.invoice.findFirst({
+        where: { repairJobId: job.id, status: { not: "VOID" } },
+        include: { lines: { orderBy: { id: "asc" } } },
+        orderBy: { createdDate: "desc" },
+    });
+    if (persistedInvoice) {
+        return {
+            invoiceNumber: persistedInvoice.invoiceNumber,
+            jobNumber: job.raJobId || `RMA-${job.id}`,
+            issueDate: dateOnly(persistedInvoice.issuedAt || persistedInvoice.createdDate),
+            dueDate: dateOnly(persistedInvoice.dueAt),
+            organization: job.organization,
+            customer: job.customer,
+            items: persistedInvoice.lines.map((line) => ({
+                description: line.description,
+                rate: Number(line.unitPrice),
+                quantity: line.quantity,
+                total: Number(line.total),
+            })),
+            subtotal: Number(persistedInvoice.subtotal),
+            tax: Number(persistedInvoice.tax),
+            total: Number(persistedInvoice.total),
+            paymentInfo: {
+                bankName: process.env.INVOICE_BANK_NAME || job.organization?.name || "",
+                accountName: process.env.INVOICE_ACCOUNT_NAME || job.organization?.name || "",
+                accountNumber: process.env.INVOICE_ACCOUNT_NUMBER || job.organization?.email || "",
+            },
+            signatureName: process.env.INVOICE_SIGNATURE_NAME || job.organization?.name || "",
+            logo,
+        };
+    }
+    const subtotalDecimal = sumMoney(job.costings
         .filter((cost) => cost.costType !== "TAX")
-        .reduce((sum, cost) => sum + Number(cost.customerCharge || 0), 0);
-    const tax = subtotal * (Number(process.env.TAX_RATE || 0) / 100);
-    const total = subtotal + tax;
+        .map((cost) => cost.customerCharge || 0));
+    const taxDecimal = calculateTax(subtotalDecimal, readTaxRate());
+    const totalDecimal = subtotalDecimal.plus(taxDecimal);
+    const subtotal = subtotalDecimal.toNumber();
+    const tax = taxDecimal.toNumber();
+    const total = totalDecimal.toNumber();
     const invoiceDate = new Date();
     const dueDate = addDays(invoiceDate, job.customer?.paymentTerms || 0);
     const items = job.costings
@@ -116,6 +155,7 @@ const getInvoiceData = async (req, repairJobId) => {
             accountNumber: process.env.INVOICE_ACCOUNT_NUMBER || job.organization?.email || "",
         },
         signatureName: process.env.INVOICE_SIGNATURE_NAME || job.organization?.name || "",
+        logo,
     };
 };
 

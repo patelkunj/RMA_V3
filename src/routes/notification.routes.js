@@ -8,12 +8,18 @@ import {
     markRead,
     unreadCount,
 } from "../controllers/notification.controller.js";
+import { detail as preferenceDetail, update as preferenceUpdate } from "../controllers/notificationPreference.controller.js";
+import { stream } from "../controllers/notificationStream.controller.js";
 
 const router = Router();
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 const NOTIFICATION_ROLES = ["ADMIN", "SUPER_ADMIN", "TECHNICIAN", "CUSTOMER"];
 
 router.use(verifyJWT, authorizeRoles(NOTIFICATION_ROLES));
+
+router.get("/preferences", preferenceDetail);
+router.put("/preferences", preferenceUpdate);
+router.get("/stream", stream);
 
 router.get("/", listMine);
 router.post("/list", listMine);

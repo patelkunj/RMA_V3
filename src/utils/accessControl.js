@@ -66,6 +66,7 @@ const ensureRepairJobAccess = async (req, repairJobId) => {
             organizationId: true,
             customerId: true,
             jobStatus: true,
+            assignedTo: true,
         },
     });
 
@@ -76,11 +77,29 @@ const ensureRepairJobAccess = async (req, repairJobId) => {
     return repairJob;
 };
 
+const getManagedUserWhere = async (actor) => {
+    if (isSuperAdmin(actor)) return {};
+    const organizationIds = await getAssignedOrganizationIds(actor);
+    return { userOrganizations: { some: { organizationId: { in: organizationIds } } } };
+};
+
+const ensureUserManagementAccess = async (actor, targetUserId) => {
+    const target = await prisma.user.findFirst({
+        where: { id: Number(targetUserId), ...(await getManagedUserWhere(actor)) },
+        select: { id: true, role: true },
+    });
+    if (!target) throw new ApiError(404, "User not found.");
+    if (!isSuperAdmin(actor) && target.role === "SUPER_ADMIN") throw new ApiError(403, "Only super administrators can manage super administrators.");
+    return target;
+};
+
 export {
     ensureRepairJobAccess,
     ensureUserCanAccessOrganization,
     getAssignedCustomerIds,
     getAssignedOrganizationIds,
     getRepairJobAccessWhere,
+    getManagedUserWhere,
     isSuperAdmin,
+    ensureUserManagementAccess,
 };

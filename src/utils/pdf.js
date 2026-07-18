@@ -29,6 +29,21 @@ const createPdfBuffer = (lines) => {
     for (const rawLine of lines) {
         const line = normalizeLine(rawLine);
 
+        if (line.type === "image" && line.source) {
+            const y = doc.y;
+            try {
+                doc.image(line.source, doc.x, y, {
+                    fit: [Number(line.width || 140), Number(line.height || 70)],
+                    align: line.align || "left",
+                    valign: "center",
+                });
+                doc.y = y + Number(line.height || 70) + Number(line.gap || 10);
+            } catch {
+                // The report remains usable with text branding when an image cannot be decoded.
+            }
+            continue;
+        }
+
         if (line.type === "space") {
             doc.moveDown(Math.max(Number(line.size || 12) / 12, 0.5));
             continue;
@@ -88,25 +103,40 @@ const createInvoicePdfBuffer = (invoice) => {
         .text("INVOICE", left, 88, { characterSpacing: 7 });
 
     const logoX = right - 130;
-    doc
-        .lineWidth(2)
-        .strokeColor(ink)
-        .circle(logoX + 78, 102, 36)
-        .stroke();
-    doc
-        .font("Times-Italic")
-        .fontSize(38)
-        .fillColor(ink)
-        .text(invoice.organization?.alias || "RMA", logoX + 38, 80, {
-            width: 92,
-            align: "center",
-        });
+    let renderedLogo = false;
+    if (Buffer.isBuffer(invoice.logo?.buffer)) {
+        try {
+            doc.image(invoice.logo.buffer, logoX + 6, 65, {
+                fit: [124, 72],
+                align: "center",
+                valign: "center",
+            });
+            renderedLogo = true;
+        } catch {
+            renderedLogo = false;
+        }
+    }
+    if (!renderedLogo) {
+        doc
+            .lineWidth(2)
+            .strokeColor(ink)
+            .circle(logoX + 78, 102, 36)
+            .stroke();
+        doc
+            .font("Times-Italic")
+            .fontSize(38)
+            .fillColor(ink)
+            .text(invoice.organization?.alias || "RMA", logoX + 38, 80, {
+                width: 92,
+                align: "center",
+            });
+    }
     doc
         .font("Helvetica-Bold")
         .fontSize(6)
         .fillColor(muted)
-        .text(invoice.organization?.name || "", logoX + 26, 124, {
-            width: 104,
+        .text(invoice.organization?.name || "", logoX + 18, renderedLogo ? 146 : 124, {
+            width: 118,
             align: "center",
             characterSpacing: 1,
         });

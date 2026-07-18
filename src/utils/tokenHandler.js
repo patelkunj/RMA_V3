@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken"
+import { randomUUID } from "crypto";
 
 const requiredEnv = (name) => {
     const value = process.env[name];
@@ -15,11 +16,15 @@ const generateAccessToken = (user) => {
       {
           id:user.id,
           email:user.email,
-          username:user.firstName
+          username:user.firstName,
+          actorType: user.role === "CUSTOMER" ? "CUSTOMER" : "USER"
       },
       requiredEnv("ACCESS_TOKEN_SECRET"),
       {
-          expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m"
+          expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m",
+          jwtid: randomUUID(),
+          issuer: process.env.JWT_ISSUER || "rma-backend",
+          audience: process.env.JWT_AUDIENCE || "rma-api"
       }
     )
   }
@@ -28,11 +33,15 @@ const generateAccessToken = (user) => {
 
     return jwt.sign(
         {
-            id:user.id
+            id:user.id,
+            actorType: user.role === "CUSTOMER" ? "CUSTOMER" : "USER"
         },
         requiredEnv("REFRESH_TOKEN_SECRET"),
         {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d"
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d",
+            jwtid: randomUUID(),
+            issuer: process.env.JWT_ISSUER || "rma-backend",
+            audience: process.env.JWT_AUDIENCE || "rma-api"
         }
     )
   }

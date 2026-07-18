@@ -2,6 +2,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
+import { ApiError } from "../utils/ApiError.js";
 
 const tempDir = "./public/temp";
 const allowedMimeTypes = new Set([
@@ -41,6 +42,35 @@ const fileFilter = (req, file, cb) => {
     files: 10,
   },
 })
+
+const logoUploadMiddleware = multer({
+  storage,
+  fileFilter(req, file, cb) {
+    if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
+      return cb(new ApiError(415, "Organization logos must be PNG or JPEG images."));
+    }
+    return cb(null, true);
+  },
+  limits: {
+    fileSize: 2 * 1024 * 1024,
+    files: 1,
+  },
+}).single("logo");
+
+const uploadOrganizationLogo = (req, res, next) => {
+  logoUploadMiddleware(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return next(new ApiError(413, "Organization logo must not exceed 2 MB."));
+    }
+    if (error instanceof multer.MulterError && error.code === "LIMIT_UNEXPECTED_FILE") {
+      return next(new ApiError(400, "Upload one logo using the 'logo' form field."));
+    }
+    return next(error);
+  });
+};
+
+export { uploadOrganizationLogo };
 
 
   

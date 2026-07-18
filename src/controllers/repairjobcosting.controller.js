@@ -7,17 +7,17 @@ import {
 } from "../services/repairjobcosting.service.js";
 
 const list = asyncHandler(async (req, res) => {
-    const costs = await listRepairJobCosts(req.body);
+    const costs = await listRepairJobCosts(req, { ...req.query, ...req.body });
     return res.status(200).json(new ApiResponse(200, costs, ""));
 });
 
 const addRepairCost = asyncHandler(async (req, res) => {
-    const repairCost = await addRepairJobCost(req.body, req.user);
+    const repairCost = await addRepairJobCost(req, req.body);
     return res.status(200).json(new ApiResponse(200, repairCost, "repair cost is inserted successfully."));
 });
 
 const updateRepairCost = asyncHandler(async (req, res) => {
-    const repairCost = await updateRepairJobCost(req.body, req.user);
+    const repairCost = await updateRepairJobCost(req, req.body);
     return res.status(200).json(new ApiResponse(200, repairCost, "repair cost is updated successfully."));
 });
 

@@ -35,7 +35,7 @@ test/
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL
 - npm
 
@@ -147,6 +147,25 @@ npm run prisma:validate
 npm run syntax:check
 npm test
 ```
+
+## Production capabilities
+
+The API now includes customer RMA intake and review, technician assignment, an enforced repair state machine, SLA monitoring, inspection/diagnosis/repair/QA work logs, estimates and customer approval, inventory movements, shipment tracking, persistent invoices and payments, tenant configuration and private organization logos used in generated PDFs, API keys and signed webhooks, a transactional outbox, idempotency protection, notification preferences and SSE delivery, privacy workflows, private document downloads, health/readiness checks, metrics, durable rate limiting, and graceful shutdown.
+
+Apply the production migration before deploying:
+
+```bash
+npm run prisma:generate
+npm run db:migrate:deploy
+```
+
+The API contract is served at `/api-docs/openapi.json`. Operational guidance, backups, monitoring, scaling, and release procedures are documented in `docs/production.md`.
+
+Organization administrators can upload a PNG or JPEG logo (maximum 2 MB) with `PUT /api/v1/organizations/:id/logo`. Logos are tenant-scoped, privately stored, and rendered on invoice and service-report PDFs. Authenticated tenant actors can retrieve the logo from `GET /api/v1/organizations/:id/logo`.
+
+State-changing creation/payment/import endpoints require an `Idempotency-Key` header. Browser clients using authentication cookies must echo the readable `csrfToken` cookie in `X-CSRF-Token`; bearer-token clients do not require the CSRF header. Internal users and customers can enable TOTP MFA under `/api/v1/mfa`.
+
+Customer login and password-reset initiation require `organizationId` together with the normalized customer email. This is required because customer email addresses are unique within an organization rather than globally. Use `POST /api/v1/customers/password-reset/request`; the legacy `/getCustomerDetail` alias remains available temporarily with the same tenant-aware body.
 
 ## Postman
 
@@ -271,11 +290,11 @@ AGENTS.md
 - Never commit `.env` or secrets.
 - Never log passwords, JWTs, reset tokens, activation tokens, cookies, request bodies, or uploaded file contents.
 - Use `src/utils/logger.js` for application logging.
-- Keep `LOG_TO_FILE=false` in container/cloud deployments unless local file logging is specifically required.
+- Keep `LOG_TO_FILE=false` in cloud deployments unless local file logging is specifically required.
 
 ## File Uploads
 
-Runtime uploads are stored under `public/uploads` and temporary uploads under `public/temp`. These should not be committed.
+Private uploads are stored through the configured storage provider. Production requires `UPLOAD_STORAGE_PROVIDER=s3`, a private S3 or S3-compatible bucket, and workload-role credentials (preferred) or an explicit access-key pair. Objects are encrypted server-side and are returned only through authenticated, tenant-scoped download endpoints. Local development and tests may use `UPLOAD_STORAGE_PROVIDER=local`, which stores private objects under `var/private-uploads`. Multer request staging remains under `public/temp`; neither location is committed.
 
 Upload routes must use:
 
@@ -292,5 +311,15 @@ Tests use Node's built-in test runner:
 ```bash
 npm test
 ```
+
+The customer tenant-authentication and critical-operations integration tests require a dedicated PostgreSQL test database and refuse database names that do not contain `test` or `integration`:
+
+```bash
+RUN_DB_INTEGRATION_TESTS=true \
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/rma_test \
+node --test test/*.integration.test.js
+```
+
+The critical suite covers billing/payment precision and locking, inventory reservation locking, repair workflow transitions, private uploads, tenant permissions, and per-endpoint outbox retries. CI enables these tests after applying all Prisma migrations. Ordinary local test runs skip their database operations.
 
 Prefer deterministic tests that do not require a live production database.

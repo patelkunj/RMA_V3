@@ -4,7 +4,7 @@ import {
     deactivateDocument,
     getDocumentForAccess,
     listDocuments,
-    resolveDocumentPath,
+    resolveDocumentDownload,
 } from "../services/document.service.js";
 
 const list = asyncHandler(async (req, res) => {
@@ -23,8 +23,10 @@ const deactivate = asyncHandler(async (req, res) => {
 });
 
 const download = asyncHandler(async (req, res) => {
-    const { document, filePath } = await resolveDocumentPath(req, req.params.id || req.body.id);
-    return res.download(filePath, document.documentName);
+    const { document, buffer, contentType } = await resolveDocumentDownload(req, req.params.id || req.body.id);
+    res.setHeader("Content-Type", contentType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(document.documentName)}`);
+    return res.status(200).send(buffer);
 });
 
 export {

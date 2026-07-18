@@ -1,5 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import prisma from "../db/prisma.js";
+import { ensureRepairJobAccess } from "../utils/accessControl.js";
+import { money, multiplyMoney } from "../utils/money.js";
 
 const COST_TYPES = new Set([
     "PART",
@@ -29,37 +31,39 @@ const parseCostValues = ({ quantity, unit_cost, is_billable }, existing = {}) =>
     const parsedQuantity = quantity !== undefined && quantity !== null && quantity !== ""
         ? Number(quantity)
         : existing.quantity ?? 1;
-    const parsedUnitCost = unit_cost !== undefined && unit_cost !== null && unit_cost !== ""
-        ? Number(unit_cost)
-        : Number(existing.unitCost ?? 0);
+    const parsedUnitCost = money(
+        unit_cost !== undefined && unit_cost !== null && unit_cost !== "" ? unit_cost : existing.unitCost ?? 0,
+        "unit_cost",
+    );
 
     if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0) {
         throw new ApiError(400, "quantity must be a positive integer.");
     }
 
-    if (!Number.isFinite(parsedUnitCost) || parsedUnitCost < 0) {
-        throw new ApiError(400, "unit_cost must be a positive number.");
-    }
-
     const billable = parseBillable(is_billable, existing.billableToCustomer ?? false);
-    const totalCost = parsedQuantity * parsedUnitCost;
+    const totalCost = multiplyMoney(parsedUnitCost, parsedQuantity);
 
     return {
         quantity: parsedQuantity,
         unitCost: parsedUnitCost,
         totalCost,
         billableToCustomer: billable,
-        customerCharge: billable ? totalCost : 0,
+        customerCharge: billable ? totalCost : money(0),
     };
 };
 
-const listRepairJobCosts = async ({ repair_job_id }) => {
+const listRepairJobCosts = async (req, { repair_job_id, repairJobId }) => {
+    repair_job_id = repair_job_id || repairJobId;
     if (!repair_job_id) {
         throw new ApiError(400, "repair_job_id is empty");
     }
 
+    await ensureRepairJobAccess(req, repair_job_id);
+
     const costs = await prisma.repairJobCosting.findMany({
         where: { repairJobId: Number(repair_job_id) },
+        orderBy: { id: "desc" },
+        take: 500,
     });
 
     if (!costs.length) {
@@ -69,7 +73,7 @@ const listRepairJobCosts = async ({ repair_job_id }) => {
     return costs;
 };
 
-const addRepairJobCost = async (payload, user) => {
+const addRepairJobCost = async (req, payload) => {
     const {
         repair_job_id,
         cost_type,
@@ -82,6 +86,7 @@ const addRepairJobCost = async (payload, user) => {
 
     const costType = normalizeCostType(cost_type);
     const costValues = parseCostValues(payload);
+    await ensureRepairJobAccess(req, repair_job_id);
 
     return prisma.$transaction(async (tx) => {
         const repairCost = await tx.repairJobCosting.create({
@@ -97,7 +102,7 @@ const addRepairJobCost = async (payload, user) => {
                 repairJobId: Number(repair_job_id),
                 actionType: "CREATE",
                 description: `Repair cost is added. ${description}`,
-                performedBy: Number(user?.id),
+                performedBy: Number(req.user.id),
             },
         });
 
@@ -105,7 +110,7 @@ const addRepairJobCost = async (payload, user) => {
     });
 };
 
-const updateRepairJobCost = async (payload, user) => {
+const updateRepairJobCost = async (req, payload) => {
     const {
         id,
         cost_type,
@@ -125,6 +130,8 @@ const updateRepairJobCost = async (payload, user) => {
         throw new ApiError(400, "repair cost not found.");
     }
 
+    await ensureRepairJobAccess(req, existing.repairJobId);
+
     const costValues = parseCostValues(payload, existing);
 
     return prisma.$transaction(async (tx) => {
@@ -141,7 +148,7 @@ const updateRepairJobCost = async (payload, user) => {
                 repairJobId: existing.repairJobId,
                 actionType: "UPDATE",
                 description: `Repair cost is updated. ${description}`,
-                performedBy: Number(user?.id),
+                performedBy: Number(req.user.id),
             },
         });
 

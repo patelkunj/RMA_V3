@@ -6,10 +6,11 @@ import {
     revoke,
     revokeAll,
 } from "../controllers/session.controller.js";
+import { authRateLimit } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
 
-router.post("/refresh", refresh);
+router.post("/refresh", authRateLimit, refresh);
 
 router.use(verifyJWT);
 router.get("/", list);
