@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import fs from 'fs';
 import prisma from "../db/prisma.js"
 import { respondWithSafeError, safeServiceError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 import {
     ensureUserCanAccessOrganization,
     getAssignedOrganizationIds,
@@ -85,13 +86,11 @@ const listSerialNumber = asyncHandler(async(req,res) => {
             prisma.productSerial.count({ where }),
         ]);
 
-        return res.status(200).json(new ApiResponse(200, {
-            serialNumbers: list,
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-        }, " List of SerialNumbers"))
+        return res.status(200).json(new ApiResponse(
+            200,
+            paginatedData(list, { total, page, limit }, "serialNumbers"),
+            "Serial numbers fetched successfully.",
+        ))
 
     } catch (error) {
         throw safeServiceError(error, "serial-number.list", "Unable to list serial numbers.");
@@ -102,43 +101,57 @@ const updateSerialNumber = asyncHandler(async(req,res) => {
     // update with field value.
     try {
 
-        const {
-            id,
-            organization_id,
-            product_id,
-            serial_number,
-            sales_order,
-            sales_date,
-            warranty_expriy,
-            is_replacement,
-        } = req.body
+        const id = req.params.id ?? req.body?.id;
+        const organizationId = req.body.organizationId ?? req.body.organization_id;
+        const productId = req.body.productId ?? req.body.product_id;
+        const serialNumber = req.body.serialNumber ?? req.body.serial_number;
+        const salesInvoice = req.body.salesInvoice ?? req.body.salesOrder ?? req.body.sales_order;
+        const saleDate = req.body.saleDate ?? req.body.salesDate ?? req.body.sales_date;
+        const warrantyExpiry = req.body.warrantyExpiry ?? req.body.warranty_expriy;
+        const isReplacementProduct = req.body.isReplacementProduct ?? req.body.isReplacement ?? req.body.is_replacement;
 
          // validation of data
-        if([id, organization_id, product_id, serial_number,sales_order, sales_date, warranty_expriy].some((field) => String(field ?? "").trim() === "")){
+        if([id, organizationId, productId, serialNumber, salesInvoice, saleDate, warrantyExpiry].some((field) => String(field ?? "").trim() === "")){
             return res.status(400).json(new ApiError(400, "All field are required"))
         }
 
-        await ensureUserCanAccessOrganization(req.user, organization_id);
-        await ensureProductBelongsToOrganization(product_id, organization_id);
+        const assignedOrganizationIds = isSuperAdmin(req.user) ? [] : await getAssignedOrganizationIds(req.user);
+        const existingSerial = await prisma.productSerial.findFirst({
+            where: {
+                id: Number(id),
+                ...(isSuperAdmin(req.user) ? {} : { organizationId: { in: assignedOrganizationIds } }),
+            },
+            select: { id: true, organizationId: true },
+        });
+        if (!existingSerial) throw new ApiError(404, "Serial number not found.");
+        if (!isSuperAdmin(req.user) && existingSerial.organizationId !== Number(organizationId)) {
+            throw new ApiError(403, "Only super administrators can move a serial number between organizations.");
+        }
+
+        await ensureUserCanAccessOrganization(req.user, organizationId);
+        await ensureProductBelongsToOrganization(productId, organizationId);
+        const duplicate = await prisma.productSerial.findUnique({
+            where: { serialNumber },
+            select: { id: true },
+        });
+        if (duplicate && duplicate.id !== existingSerial.id) {
+            throw new ApiError(409, "Serial number already exists.");
+        }
 
         const data = await prisma.productSerial.update({
-            where: { id: Number(id) },
+            where: { id: existingSerial.id, organizationId: existingSerial.organizationId },
             data: {
-                organizationId: Number(organization_id),
-                productId: Number(product_id),
-                serialNumber: serial_number,
-                salesInvoice: sales_order, // mapped — see conversion notes #1
-                saleDate: parseDate(sales_date, "sales_date"),
-                warrantyExpiry: parseDate(warranty_expriy, "warranty_expriy"),
-                isReplacementProduct: is_replacement !== undefined ? (is_replacement === true || is_replacement === 'true') : undefined,
+                organizationId: Number(organizationId),
+                productId: Number(productId),
+                serialNumber,
+                salesInvoice,
+                saleDate: parseDate(saleDate, "saleDate"),
+                warrantyExpiry: parseDate(warrantyExpiry, "warrantyExpiry"),
+                isReplacementProduct: isReplacementProduct !== undefined ? (isReplacementProduct === true || isReplacementProduct === 'true') : undefined,
             },
         });
 
-        if(!data){
-            return res.status(400).json(new ApiError(400," Error while updateing serialnumber data"))
-        }
-
-        res.status(200).json(new ApiResponse(200,data,"Update the serial number successfully."))
+        return res.status(200).json(new ApiResponse(200, data, "Serial number updated successfully."))
 
     } catch (error) {
         return respondWithSafeError(res, error, "serial-number.update", "Unable to update serial number.");
@@ -148,42 +161,39 @@ const updateSerialNumber = asyncHandler(async(req,res) => {
 const insertSerialNumber = asyncHandler(async(req,res) => {
     // update with field value.
     try {
-        const {
-            organization_id,
-            product_id,
-            serial_number,
-            sales_order,
-            sales_date,
-            warranty_expriy,
-            is_replacement,
-        } = req.body
+        const organizationId = req.body.organizationId ?? req.body.organization_id;
+        const productId = req.body.productId ?? req.body.product_id;
+        const serialNumber = req.body.serialNumber ?? req.body.serial_number;
+        const salesInvoice = req.body.salesInvoice ?? req.body.salesOrder ?? req.body.sales_order;
+        const saleDate = req.body.saleDate ?? req.body.salesDate ?? req.body.sales_date;
+        const warrantyExpiry = req.body.warrantyExpiry ?? req.body.warranty_expriy;
+        const isReplacementProduct = req.body.isReplacementProduct ?? req.body.isReplacement ?? req.body.is_replacement;
 
         // validation of data
-        if([organization_id, product_id, serial_number,sales_order, sales_date, warranty_expriy].some((field) => String(field ?? "").trim() === "")){
+        if([organizationId, productId, serialNumber, salesInvoice, saleDate, warrantyExpiry].some((field) => String(field ?? "").trim() === "")){
             return res.status(400).json(new ApiError(400, "All field are required"))
         }
 
-        await ensureUserCanAccessOrganization(req.user, organization_id);
-        await ensureProductBelongsToOrganization(product_id, organization_id);
+        await ensureUserCanAccessOrganization(req.user, organizationId);
+        await ensureProductBelongsToOrganization(productId, organizationId);
 
         // serialNumber is @unique, so findUnique is the correct lookup here.
         const existingSerialNumber = await prisma.productSerial.findUnique({
-            where: { serialNumber: serial_number },
+            where: { serialNumber },
         });
         if(existingSerialNumber){
-            // NOTE: condition fixed — see conversion notes #2
-            return res.status(400).json(new ApiResponse(400,existingSerialNumber, "Serial number is alreadt exisit."))
+            return res.status(409).json(new ApiError(409, "Serial number already exists."))
         }
 
         const data = await prisma.productSerial.create({
             data: {
-                organizationId: Number(organization_id),
-                productId: Number(product_id),
-                serialNumber: serial_number,
-                salesInvoice: sales_order, // mapped — see conversion notes #1
-                saleDate: parseDate(sales_date, "sales_date"),
-                warrantyExpiry: parseDate(warranty_expriy, "warranty_expriy"),
-                isReplacementProduct: is_replacement === true || is_replacement === 'true',
+                organizationId: Number(organizationId),
+                productId: Number(productId),
+                serialNumber,
+                salesInvoice,
+                saleDate: parseDate(saleDate, "saleDate"),
+                warrantyExpiry: parseDate(warrantyExpiry, "warrantyExpiry"),
+                isReplacementProduct: isReplacementProduct === true || isReplacementProduct === 'true',
             },
         });
 
@@ -191,7 +201,7 @@ const insertSerialNumber = asyncHandler(async(req,res) => {
             return res.status(400).json(new ApiError(400," Error while inserting serialnumber data"))
         }
 
-        return res.status(200).json(new ApiResponse(200, data, "insert serial umber recored successfully."))
+        return res.status(201).json(new ApiResponse(201, data, "Serial number created successfully."))
 
     } catch (error) {
         return respondWithSafeError(res, error, "serial-number.insert", "Unable to insert serial number.");

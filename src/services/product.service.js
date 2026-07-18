@@ -8,21 +8,22 @@ import {
     isSuperAdmin,
 } from "../utils/accessControl.js";
 import { safeServiceError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const insertProduct = asyncHandler(async (req, res) => {
     try {
 
         const {
             sku,
-            product_name,
             model,
             color,
             organizationId
         } = req.body;
+        const productName = req.body.productName ?? req.body.name ?? req.body.product_name;
 
         if (
-            [sku, product_name, organizationId]
-                .some(field => field?.toString().trim() === "")
+            [sku, productName, organizationId]
+                .some(field => String(field ?? "").trim() === "")
         ) {
             throw new ApiError(400, "Required data is missing.");
         }
@@ -38,7 +39,7 @@ const insertProduct = asyncHandler(async (req, res) => {
 
         if (existingProduct) {
             throw new ApiError(
-                400,
+                409,
                 "Product with this SKU already exists."
             );
         }
@@ -47,7 +48,7 @@ const insertProduct = asyncHandler(async (req, res) => {
             data: {
                 organizationId: Number(organizationId),
                 sku: sku.trim(),
-                name: product_name.trim(),
+                name: productName.trim(),
                 model: model?.trim() || null,
                 color: color?.trim() || null
             }
@@ -70,17 +71,17 @@ const updateProduct = asyncHandler(async (req, res) => {
     try {
 
         const {
-            id,
             sku,
-            product_name,
             model,
             color,
             organizationId
         } = req.body;
+        const id = req.params.id ?? req.body.id;
+        const productName = req.body.productName ?? req.body.name ?? req.body.product_name;
 
         if (
-            [id, sku, product_name, organizationId]
-                .some(field => field?.toString().trim() === "")
+            [id, sku, productName, organizationId]
+                .some(field => String(field ?? "").trim() === "")
         ) {
             throw new ApiError(400, "Required data is missing.");
         }
@@ -107,7 +108,7 @@ const updateProduct = asyncHandler(async (req, res) => {
             data: {
                 organizationId: Number(organizationId),
                 sku: sku.trim(),
-                name: product_name.trim(),
+                name: productName.trim(),
                 model: model?.trim() || null,
                 color: color?.trim() || null
             }
@@ -156,14 +157,8 @@ const listProducts = asyncHandler(async (req, res) => {
         return res.status(200).json(
             new ApiResponse(
                 200,
-                {
-                    products,
-                    total,
-                    page,
-                    limit,
-                    totalPages: Math.ceil(total / limit),
-                },
-                "Product list"
+                paginatedData(products, { total, page, limit }, "products"),
+                "Products fetched successfully."
             )
         );
 
@@ -219,9 +214,9 @@ const listAllProduct = asyncHandler(async (req, res) => {
 const searchProduct = asyncHandler(async (req, res) => {
     try {
 
-        const { keyword } = req.body;
+        const keyword = req.query.keyword ?? req.query.q ?? req.body?.keyword;
 
-        if (!keyword?.trim()) {
+        if (!String(keyword ?? "").trim()) {
             throw new ApiError(
                 400,
                 "Keyword is required."
@@ -237,7 +232,7 @@ const searchProduct = asyncHandler(async (req, res) => {
                 new ApiResponse(
                     200,
                     [],
-                    "Product list"
+                    "Products fetched successfully."
                 )
             );
         }
@@ -282,7 +277,7 @@ const searchProduct = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 products,
-                "Product list"
+                "Products fetched successfully."
             )
         );
 

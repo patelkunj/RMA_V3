@@ -9,7 +9,11 @@ import {
 
 const list = asyncHandler(async (req, res) => {
     const documents = await listDocuments(req, { ...req.query, ...req.body });
-    return res.status(200).json(new ApiResponse(200, documents, "Documents fetched successfully."));
+    return res.status(200).json(new ApiResponse(
+        200,
+        req.isDeprecatedRoute ? documents.documents : documents,
+        "Documents fetched successfully.",
+    ));
 });
 
 const detail = asyncHandler(async (req, res) => {

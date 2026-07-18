@@ -12,11 +12,12 @@ import {
     getAssignedOrganizationIds,
     isSuperAdmin,
 } from "../utils/accessControl.js";
-import { assertStrongPassword, assertValidEmail, normalizeEmail } from "../utils/validation.js";
+import { assertStrongPassword, assertValidEmail, normalizeEmail, resolveActiveStatus } from "../utils/validation.js";
 import { logger } from "../utils/logger.js";
 import { exposeTokensInResponse, generateSecret, hashToken } from "../utils/tokenSecurity.js";
 import { authenticateCustomer, requestCustomerPasswordReset } from "../services/customerAuth.service.js";
 import { respondWithSafeError, safeServiceError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 
 import prisma from "../db/prisma.js"
 // import { Prisma } from "@prisma/client"
@@ -98,7 +99,7 @@ const registerCustomer = asyncHandler(async (req,res) => {
 
 
             if(existingCustomer){
-                return res.status(400).json(new ApiError(400,"Customer with company name is already exists !!!"))
+                return res.status(409).json(new ApiError(409, "A customer with this company name or email already exists."))
             }
 
             // generate the store code/ customer code
@@ -165,7 +166,7 @@ const registerCustomer = asyncHandler(async (req,res) => {
                 const emailSend = await sendAccountActivationEmail({
                     to: customer.email,
                     name: customer.contactPersonName || customer.companyName,
-                    activationUrl: activationUrl(`/api/v1/customers/activecustomer/${activationToken}`),
+                    activationUrl: activationUrl(`/api/v1/customers/activate/${activationToken}`),
                 });
 
                 log.logStatus =  "Successful";
@@ -181,7 +182,7 @@ const registerCustomer = asyncHandler(async (req,res) => {
 
                 log.logStatus =  "Failure";
                 await prisma.systemLog.create({data:log})
-                return res.status(400).json(new ApiResponse(400,"something went wrong in register the customer"))
+                return res.status(500).json(new ApiError(500, "Unable to register customer."))
             }
 
     }catch(error){
@@ -256,7 +257,7 @@ const logoutCustomer = asyncHandler( async (req, res) =>{
         .clearCookie("refreshToken",options)
         .clearCookie("csrfToken", { ...options, httpOnly: false })
         .json(
-            new ApiResponse(200,{}, "Customer Logged out")
+            new ApiResponse(200, null, "Customer logged out successfully.")
         )
 
     }catch(error){
@@ -390,7 +391,7 @@ const activeCustomer = asyncHandler( async (req, res) =>{
 const getCustomerInfo = asyncHandler( async (req, res) =>{
     try{
 
-        const {email} = req.body
+        const email = req.query.email ?? req.body?.email
 
         if(!email){
             return res.status(400).json(new ApiError(400," email is required."))
@@ -413,9 +414,9 @@ const getCustomerInfo = asyncHandler( async (req, res) =>{
         })
 
         if(customer){
-           return res.status(201).json(new ApiResponse(200, customer, " Fetch the customer information successfully. "))
+           return res.status(200).json(new ApiResponse(200, customer, "Customer information fetched successfully."))
         }else{
-            return res.status(404).json(new ApiError(404," Issue to fetch customer data"))
+            return res.status(404).json(new ApiError(404, "Customer not found."))
         }
     }catch(error){
         logger.error("Customer info lookup failed", error)
@@ -524,13 +525,11 @@ const listCustomer = asyncHandler( async (req, res) =>{
             prisma.customer.count({ where }),
         ]);
 
-        return res.status(200).json(new ApiResponse(200,{
-            customers,
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-        }," Customer list."))
+        return res.status(200).json(new ApiResponse(
+            200,
+            paginatedData(customers, { total, page, limit }, "customers"),
+            "Customers fetched successfully.",
+        ))
 
     }catch(error){
         throw safeServiceError(error, "customer.list", "Unable to list customers.");
@@ -540,7 +539,6 @@ const listCustomer = asyncHandler( async (req, res) =>{
 const updateCustomer = asyncHandler( async (req, res) =>{
     try{
         const {
-            id,
             companyName,
             email,
             contactPersonName,
@@ -549,14 +547,15 @@ const updateCustomer = asyncHandler( async (req, res) =>{
             returnAddress,
             warrantyMonths,
             warrantyType,
-            doaArrantyDays,
             doaWarrantyType,
             warrantyRemarks,
             salesPerson,
             isPickupFaulty
         } = req.body
+        const id = req.params.id ?? req.body?.id;
+        const doaWarrantyDays = req.body.doaWarrantyDays ?? req.body.doaArrantyDays;
 
-        if([companyName,email,contactPersonName,contactPersonEmail,returnAddress,warrantyMonths, warrantyType, doaArrantyDays,doaWarrantyType,warrantyRemarks,salesPerson].some((field) => field?.trim() === "")){
+        if([companyName,email,contactPersonName,contactPersonEmail,returnAddress,warrantyMonths, warrantyType, doaWarrantyDays,doaWarrantyType,warrantyRemarks,salesPerson].some((field) => String(field ?? "").trim() === "")){
             throw new ApiError(400, "All field are required")
         }
         const normalizedEmail = normalizeEmail(email);
@@ -585,7 +584,7 @@ const updateCustomer = asyncHandler( async (req, res) =>{
                 returnAddress,
                 warrantyMonths,
                 warrantyTypes: warrantyType,
-                doaWarrantyDays: Number(doaArrantyDays),
+                doaWarrantyDays: Number(doaWarrantyDays),
                 doaWarrantyTypes: doaWarrantyType,
                 warrantyRemarks,
                 salesPerson,
@@ -598,7 +597,7 @@ const updateCustomer = asyncHandler( async (req, res) =>{
             return res.status(400).json(new ApiError(400, "Error while updating customer."))
         }
 
-        res.status(200).json(new ApiResponse(200,customer," Update customer successfaully."))
+        res.status(200).json(new ApiResponse(200, customer, "Customer updated successfully."))
 
     }catch(error){
         throw safeServiceError(error, "customer.update", "Unable to update customer.");
@@ -607,10 +606,10 @@ const updateCustomer = asyncHandler( async (req, res) =>{
 
 const searchCustomer = asyncHandler(async(req,res)=>{
     try {
-        const { searchTerm } = req.body
+        const searchTerm = req.query.searchTerm ?? req.query.q ?? req.body?.searchTerm
 
-        if(!searchTerm){
-            throw new ApiError(400,"seach term in empty.")
+        if (!String(searchTerm ?? "").trim()) {
+            throw new ApiError(400, "searchTerm is required.")
         }
 
         const organizationIds = isSuperAdmin(req.user)
@@ -631,19 +630,16 @@ const searchCustomer = asyncHandler(async(req,res)=>{
             take: 50,
         })
 
-        if(!customer){
-            throw new ApiError(400," No Customer found.")
-        }
-        res.status(200).json(new ApiResponse(200, customer, "customer found."))
+        return res.status(200).json(new ApiResponse(200, customer, "Customers fetched successfully."))
     } catch (error) {
-        throw new ApiError(400," Error in searching customer")
+        throw safeServiceError(error, "customer.search", "Unable to search customers.");
     }
 })
 
 const getCustomerByID = asyncHandler( async (req, res) =>{
     try{
 
-        const {id} = req.body
+        const id = req.params.id ?? req.body?.id
         if(!id){
             return res.status(400).json(new ApiError(400,'customer id is requied.'))
         }
@@ -661,9 +657,9 @@ const getCustomerByID = asyncHandler( async (req, res) =>{
         })
 
         if(customer){
-           return res.status(200).json(new ApiResponse(200, customer, " Fetch the customer information successfully. "))
+           return res.status(200).json(new ApiResponse(200, customer, "Customer information fetched successfully."))
         }else{
-            return res.status(404).json(new ApiError(404, customer, " Issue to fetch customer data"))
+            return res.status(404).json(new ApiError(404, "Customer not found."))
         }
     }catch(error){
         return respondWithSafeError(res, error, "customer.detail", "Unable to fetch customer.");
@@ -673,7 +669,7 @@ const getCustomerByID = asyncHandler( async (req, res) =>{
 const toggleStatus = asyncHandler( async (req, res) =>{
     try {
 
-        const {id} = req.query
+        const id = req.params.id ?? req.query.id ?? req.body?.id
 
         if(!id){
             return res.status(400).json(new ApiError(400, "All the field required"));
@@ -689,10 +685,14 @@ const toggleStatus = asyncHandler( async (req, res) =>{
         }
 
         await ensureUserCanAccessOrganization(req.user, customerData.organizationId);
+        const nextStatus = resolveActiveStatus(req.body?.isActive, {
+            currentStatus: customerData.isActive,
+            isDeprecatedRoute: req.isDeprecatedRoute,
+        });
 
         const customer = await prisma.customer.update({
             where: {id:Number(id)},
-            data: {isActive: !customerData.isActive},
+            data: {isActive: nextStatus},
             select: publicCustomerSelect,
         })
 
@@ -703,15 +703,15 @@ const toggleStatus = asyncHandler( async (req, res) =>{
         const log={
             actorId: req.user.id,
             actorRole: req.user.role,
-            description : `${req.user.firstName} ${req.user.lastName} has ${customerData.isActive ? 'deactivated': 'activated'} the customer ${customerData.companyName}`,
+            description : `${req.user.firstName} ${req.user.lastName} has ${nextStatus ? 'activated' : 'deactivated'} the customer ${customerData.companyName}`,
             logStatus: "Successful"
         }
         await prisma.systemLog.create({data:log})
 
-        res.status(200).json(new ApiResponse(200,customer,"Customer status changed successfully"))
+        return res.status(200).json(new ApiResponse(200, customer, "Customer status changed successfully."))
 
     } catch (error) {
-        res.status(400).json(new ApiError(400," Error while changeing the status."))
+        throw safeServiceError(error, "customer.update-status", "Unable to change customer status.");
     }
 })
 

@@ -9,7 +9,8 @@ import {
     isSuperAdmin,
 } from "../utils/accessControl.js";
 import { logger } from "../utils/logger.js";
-import { assertValidEmail, normalizeEmail, parsePositiveInt } from "../utils/validation.js";
+import { assertValidEmail, normalizeEmail, parsePositiveInt, resolveActiveStatus } from "../utils/validation.js";
+import { paginatedData } from "../utils/pagination.js";
 import { deletePrivateObject, getPrivateObject, putPrivateObject } from "./objectStorage.service.js";
 
 const LOGO_MIME_EXTENSIONS = new Map([
@@ -105,13 +106,11 @@ const listOrganizations = async (req, filters = {}) => {
         }),
         prisma.organization.count({ where }),
     ]);
-    return {
-        organizations: organizations.map(toPublicOrganization),
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-    };
+    return paginatedData(
+        organizations.map(toPublicOrganization),
+        { total, page, limit },
+        "organizations",
+    );
 };
 
 const createOrganization = async (req, payload) => {
@@ -139,11 +138,15 @@ const updateOrganizationRecord = async (req, payload) => {
     return toPublicOrganization(organization);
 };
 
-const toggleOrganizationStatus = async (req, organizationId) => {
+const toggleOrganizationStatus = async (req, organizationId, requestedStatus) => {
     const organization = await ensureOrganizationExistsAndAccessible(req, organizationId);
+    const isActive = resolveActiveStatus(requestedStatus, {
+        currentStatus: organization.isActive,
+        isDeprecatedRoute: req.isDeprecatedRoute,
+    });
     const updated = await prisma.organization.update({
         where: { id: organization.id },
-        data: { isActive: !organization.isActive },
+        data: { isActive },
         select: organizationSelect,
     });
     return toPublicOrganization(updated);

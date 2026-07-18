@@ -12,6 +12,7 @@ const createInvoice = async (req, repairJobId, payload = {}) => {
     const jobAccess = await ensureRepairJobAccess(req, repairJobId);
 
     return prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "RepairJob" WHERE "id" = ${jobAccess.id} FOR UPDATE`;
         const existing = await tx.invoice.findFirst({
             where: { repairJobId: jobAccess.id, status: { not: "VOID" } },
             orderBy: { createdDate: "desc" },
@@ -22,6 +23,7 @@ const createInvoice = async (req, repairJobId, payload = {}) => {
             where: { id: jobAccess.id },
             include: { costings: { include: { product: true }, orderBy: { id: "asc" } }, customer: true },
         });
+        if (!job) throw new ApiError(404, "Repair job not found.");
         const settings = await tx.organizationSetting.upsert({
             where: { organizationId: job.organizationId },
             create: {
@@ -95,45 +97,66 @@ const recordPayment = async (req, invoiceId, payload) => {
     if (!amount.greaterThan(0)) throw new ApiError(400, "amount must be positive.");
     if (invoice.amountPaid.plus(amount).greaterThan(invoice.total)) throw new ApiError(409, "Payment exceeds the outstanding invoice balance.");
     if (!String(payload.method || "").trim()) throw new ApiError(400, "method is required.");
+    const externalRef = String(payload.externalRef || "").trim() || null;
 
-    return prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${invoice.id} FOR UPDATE`;
-        const currentInvoice = await tx.invoice.findUnique({ where: { id: invoice.id } });
-        if (!["ISSUED", "PARTIALLY_PAID", "OVERDUE"].includes(currentInvoice.status)) throw new ApiError(409, "Invoice cannot accept payments in its current status.");
-        if (currentInvoice.amountPaid.plus(amount).greaterThan(currentInvoice.total)) throw new ApiError(409, "Payment exceeds the outstanding invoice balance.");
-        const payment = await tx.payment.create({
-            data: {
-                invoiceId: invoice.id,
-                status: "SUCCEEDED",
-                amount,
-                method: String(payload.method).trim(),
-                externalRef: String(payload.externalRef || "").trim() || null,
-                paidAt: payload.paidAt ? new Date(payload.paidAt) : new Date(),
-                createdBy: req.user.id,
-            },
+    try {
+        return await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${invoice.id} FOR UPDATE`;
+            const currentInvoice = await tx.invoice.findUnique({ where: { id: invoice.id } });
+            if (!["ISSUED", "PARTIALLY_PAID", "OVERDUE"].includes(currentInvoice.status)) throw new ApiError(409, "Invoice cannot accept payments in its current status.");
+            if (currentInvoice.amountPaid.plus(amount).greaterThan(currentInvoice.total)) throw new ApiError(409, "Payment exceeds the outstanding invoice balance.");
+            if (externalRef) {
+                const duplicate = await tx.payment.findUnique({
+                    where: { invoiceId_externalRef: { invoiceId: invoice.id, externalRef } },
+                    select: { id: true },
+                });
+                if (duplicate) throw new ApiError(409, "A payment with this external reference already exists for the invoice.");
+            }
+            const payment = await tx.payment.create({
+                data: {
+                    invoiceId: invoice.id,
+                    status: "SUCCEEDED",
+                    amount,
+                    method: String(payload.method).trim(),
+                    externalRef,
+                    paidAt: payload.paidAt ? new Date(payload.paidAt) : new Date(),
+                    createdBy: req.user.id,
+                },
+            });
+            const amountPaid = currentInvoice.amountPaid.plus(amount);
+            const updated = await tx.invoice.update({
+                where: { id: invoice.id },
+                data: { amountPaid, status: amountPaid.greaterThanOrEqualTo(currentInvoice.total) ? "PAID" : "PARTIALLY_PAID" },
+            });
+            await enqueueOutbox(tx, {
+                organizationId: invoice.organizationId,
+                eventType: "payment.succeeded",
+                aggregateType: "Payment",
+                aggregateId: payment.id,
+                payload: { paymentId: payment.id, invoiceId: invoice.id, amount: amount.toFixed(2) },
+            });
+            return { invoice: updated, payment };
         });
-        const amountPaid = currentInvoice.amountPaid.plus(amount);
-        const updated = await tx.invoice.update({
-            where: { id: invoice.id },
-            data: { amountPaid, status: amountPaid.greaterThanOrEqualTo(currentInvoice.total) ? "PAID" : "PARTIALLY_PAID" },
-        });
-        await enqueueOutbox(tx, {
-            organizationId: invoice.organizationId,
-            eventType: "payment.succeeded",
-            aggregateType: "Payment",
-            aggregateId: payment.id,
-            payload: { paymentId: payment.id, invoiceId: invoice.id, amount: amount.toFixed(2) },
-        });
-        return { invoice: updated, payment };
-    });
+    } catch (error) {
+        if (externalRef && error?.code === "P2002") {
+            throw new ApiError(409, "A payment with this external reference already exists for the invoice.");
+        }
+        throw error;
+    }
 };
 
 const voidInvoice = async (req, invoiceId, reason) => {
     const invoice = await getInvoice(req, invoiceId);
     if (!req.user || !["ADMIN", "SUPER_ADMIN"].includes(req.user.role)) throw new ApiError(403, "Only administrators can void invoices.");
-    if (invoice.amountPaid.greaterThan(0)) throw new ApiError(409, "Paid invoices must be refunded before they can be voided.");
     if (!String(reason || "").trim()) throw new ApiError(400, "reason is required.");
-    return prisma.invoice.update({ where: { id: invoice.id }, data: { status: "VOID", voidedAt: new Date() } });
+    return prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${invoice.id} FOR UPDATE`;
+        const current = await tx.invoice.findUnique({ where: { id: invoice.id } });
+        if (!current) throw new ApiError(404, "Invoice not found.");
+        if (current.amountPaid.greaterThan(0)) throw new ApiError(409, "Paid invoices must be refunded before they can be voided.");
+        if (current.status === "VOID") throw new ApiError(409, "Invoice is already void.");
+        return tx.invoice.update({ where: { id: current.id }, data: { status: "VOID", voidedAt: new Date() } });
+    });
 };
 
 export { createInvoice, getInvoice, recordPayment, voidInvoice };

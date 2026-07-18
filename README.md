@@ -182,6 +182,8 @@ Recommended flow:
 3. The collection stores `accessToken` automatically.
 4. Run protected requests.
 
+Primary collection folders use canonical routes and camelCase fields. The **Legacy Compatibility (Deprecated)** folder exists only to help verify older clients during migration; its requests should not be copied into new integrations.
+
 The collection uses seeded IDs such as:
 
 ```text
@@ -206,19 +208,27 @@ Mounted routers:
 /customers
 /organizations
 /products
-/serialnumbers
-/repairjobs
-/repairjobcost
+/serial-numbers
+/repair-jobs
+/repair-job-costs
 /chats
 /comments
 /reports
 /notifications
 /documents
-/repairjob-timeline
+/repair-job-timeline
 /sessions
+/inventory
+/shipments
+/billing
+/organization-settings
+/integrations
+/privacy
+/mfa
+/operations
 ```
 
-Some legacy route names are still supported for frontend compatibility. New route work should prefer REST-style, lowercase, kebab-case paths.
+Legacy prefixes and action-style routes remain available temporarily for client migration and return `Deprecation`, `Sunset`, `Link`, and `Warning` headers. New integrations should use the REST-style, lowercase, kebab-case paths above and camelCase request fields. See [API migration guide](docs/api-migration.md) for the complete canonical-to-legacy mapping and sunset policy.
 
 ## Reports
 
@@ -236,20 +246,14 @@ Current reports:
 - `/costs`
 - `/products`
 - `/customers`
-- `/service-report/:repairJobId.pdf`
-- `/invoice/:repairJobId.pdf`
+- `/repair-jobs/:repairJobId/service-report.pdf`
+- `/repair-jobs/:repairJobId/invoice.pdf`
+- `POST /repair-jobs/:repairJobId/invoice/email`
 
-Reports support query or body filters such as:
+JSON report endpoints use query parameters for filters and pagination, for example:
 
-```json
-{
-  "startDate": "2026-01-01",
-  "endDate": "2026-12-31",
-  "organizationId": 9001,
-  "customerId": 9401,
-  "page": 1,
-  "limit": 20
-}
+```text
+GET /api/v1/reports/summary?startDate=2026-01-01&endDate=2026-12-31&organizationId=9001
 ```
 
 ## Added Operational APIs
@@ -259,10 +263,10 @@ New supporting API areas:
 - `/api/v1/sessions`: refresh user access tokens, list sessions, revoke one session, or revoke all sessions.
 - `/api/v1/notifications`: list the signed-in recipient's notifications, create manual admin notifications, mark read, and fetch unread count. Chat notifications are generated automatically when a chat message or attachment is created.
 - `/api/v1/documents`: list, inspect, download, and deactivate repair-job documents with repair-job access checks.
-- `/api/v1/repairjob-timeline`: fetch repair-job audit logs and status tracking history.
-- `/api/v1/reports/service-report/:repairJobId.pdf`: download a repair-job service report PDF.
-- `/api/v1/reports/invoice/:repairJobId.pdf`: download a repair-job invoice PDF.
-- `POST /api/v1/reports/invoice/:repairJobId/email`: email the customer a billing message with the generated PDF invoice attached (Admin/Super Admin).
+- `/api/v1/repair-job-timeline`: fetch repair-job audit logs and status tracking history.
+- `/api/v1/reports/repair-jobs/:repairJobId/service-report.pdf`: download a repair-job service report PDF.
+- `/api/v1/reports/repair-jobs/:repairJobId/invoice.pdf`: download a repair-job invoice PDF.
+- `POST /api/v1/reports/repair-jobs/:repairJobId/invoice/email`: email the customer a billing message with the generated PDF invoice attached (Admin/Super Admin).
 
 Account activation, password reset, repair-status, and billing emails share the responsive RMA email layout in `src/templates/email.templates.js`. Set `CUSTOMER_PORTAL_URL` for repair-job links and configure the `EMAIL_*` and `INVOICE_*` variables documented in `.env.example`.
 
@@ -309,17 +313,18 @@ Upload routes must use:
 Tests use Node's built-in test runner:
 
 ```bash
-npm test
+npm run verify
 ```
 
-The customer tenant-authentication and critical-operations integration tests require a dedicated PostgreSQL test database and refuse database names that do not contain `test` or `integration`:
+The customer tenant-authentication, critical-operations, business-concurrency, and multi-instance suites require a dedicated PostgreSQL test database and refuse database names that do not contain `test` or `integration`:
 
 ```bash
 RUN_DB_INTEGRATION_TESTS=true \
+RUN_HTTP_INTEGRATION_TESTS=true \
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/rma_test \
-node --test test/*.integration.test.js
+npm test
 ```
 
-The critical suite covers billing/payment precision and locking, inventory reservation locking, repair workflow transitions, private uploads, tenant permissions, and per-endpoint outbox retries. CI enables these tests after applying all Prisma migrations. Ordinary local test runs skip their database operations.
+The suites cover billing/payment precision and locking, invoice and workflow races, MFA and refresh-token single use, inventory reservation locking and idempotency, two-process PostgreSQL rate limiting, competing workers, private uploads, tenant permissions, and outbox retries. CI enables these tests after applying all Prisma migrations. Ordinary local test runs safely skip database and loopback HTTP operations.
 
-Prefer deterministic tests that do not require a live production database.
+Run `npm run test:coverage` for the enforced coverage baseline. The opt-in bounded load runner, safety controls, profiles, thresholds, and nightly workflow are documented in [docs/testing.md](docs/testing.md). Never run integration or load tests against a production database or production API.

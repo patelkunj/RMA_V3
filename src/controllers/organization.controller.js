@@ -1,7 +1,7 @@
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
-    createOrganization,
+    createOrganization as createOrganizationRecord,
     getOrganization,
     getOrganizationLogo,
     listOrganizations,
@@ -16,18 +16,25 @@ const listOrganization = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, result, "List of all organizations"));
 });
 
-const creatOrganization = asyncHandler(async (req, res) => {
-    const organization = await createOrganization(req, req.body);
+const createOrganization = asyncHandler(async (req, res) => {
+    const organization = await createOrganizationRecord(req, req.body);
     return res.status(201).json(new ApiResponse(201, organization, "Organization created successfully"));
 });
 
 const updateOrganization = asyncHandler(async (req, res) => {
-    const organization = await updateOrganizationRecord(req, req.body);
+    const organization = await updateOrganizationRecord(req, {
+        ...req.body,
+        id: req.params.id ?? req.body?.id,
+    });
     return res.status(200).json(new ApiResponse(200, organization, "Organization updated successfully"));
 });
 
 const toggleStatus = asyncHandler(async (req, res) => {
-    const organization = await toggleOrganizationStatus(req, req.body.id);
+    const organization = await toggleOrganizationStatus(
+        req,
+        req.params.id ?? req.query.id ?? req.body?.id,
+        req.body?.isActive,
+    );
     return res.status(200).json(new ApiResponse(200, organization, "Status updated successfully"));
 });
 
@@ -58,7 +65,7 @@ const deleteLogo = asyncHandler(async (req, res) => {
 });
 
 export {
-    creatOrganization,
+    createOrganization,
     deleteLogo,
     downloadLogo,
     getOrganizationDetail,

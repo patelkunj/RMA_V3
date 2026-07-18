@@ -1,5 +1,5 @@
 export {
-    insertMultipalReapirJob,
+    insertMultipleRepairJobs,
     insertRepairJob,
     listRepairJob,
     receiveJob,

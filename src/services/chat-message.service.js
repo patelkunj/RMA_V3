@@ -5,11 +5,13 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { sendChatMessage } from "../services/chat.service.js";
 import { ensureRepairJobAccess } from "../utils/accessControl.js";
 import { respondWithSafeError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const insertChat = asyncHandler(async (req, res) => {
-    const { repair_job_id, message } = req.body;
+    const repairJobId = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id;
+    const { message } = req.body;
 
-    if (!repair_job_id) {
+    if (!repairJobId) {
         throw new ApiError(400, "Repair job id is required.");
     }
 
@@ -18,22 +20,22 @@ const insertChat = asyncHandler(async (req, res) => {
     }
 
     const chat = await sendChatMessage(req, {
-        repairJobId: repair_job_id,
+        repairJobId,
         message,
         files: req.files,
     });
 
     return res
-        .status(200)
-        .json(new ApiResponse(200, chat, "Chat sent successfully."));
+        .status(201)
+        .json(new ApiResponse(201, chat, "Chat sent successfully."));
 });
 
 const listChat = asyncHandler(async (req, res) => {
     try {
 
-        const { id } = req.body;
-        const page = Math.max(Number(req.body.page) || 1, 1);
-        const limit = Math.min(Math.max(Number(req.body.limit) || 100, 1), 100);
+        const id = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id || req.body.id;
+        const page = Math.max(Number(req.query.page || req.body.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.query.limit || req.body.limit) || 100, 1), 100);
 
         if (!id) {
             throw new ApiError(400, "Job id is required.");
@@ -50,16 +52,16 @@ const listChat = asyncHandler(async (req, res) => {
         //     }
         // });
 
-        const chats = await prisma.chat.findMany({
-            where: {
-                repairJobId: Number(id)
-            },
-            orderBy: {
-                createdDate: "asc"
-            },
-            skip: (page - 1) * limit,
-            take: limit,
-        });
+        const where = { repairJobId: Number(id) };
+        const [chats, total] = await Promise.all([
+            prisma.chat.findMany({
+                where,
+                orderBy: { createdDate: "asc" },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+            prisma.chat.count({ where }),
+        ]);
 
         const chatWithSender = await Promise.all(
             chats.map(async (chat) => {
@@ -97,12 +99,22 @@ const listChat = asyncHandler(async (req, res) => {
         if (!chatWithSender.length) {
             return res
                 .status(200)
-                .json(new ApiResponse(200, null, "No chat found."));
+                .json(new ApiResponse(
+                    200,
+                    req.isDeprecatedRoute ? [] : paginatedData([], { total, page, limit }, "chats"),
+                    "No chat messages found.",
+                ));
         }
 
         return res
             .status(200)
-            .json(new ApiResponse(200, chatWithSender, "List of chat messages."));
+            .json(new ApiResponse(
+                200,
+                req.isDeprecatedRoute
+                    ? chatWithSender
+                    : paginatedData(chatWithSender, { total, page, limit }, "chats"),
+                "Chat messages fetched successfully.",
+            ));
 
     } catch (error) {
         if (error instanceof ApiError) return res.status(error.statusCode).json(error);
@@ -113,7 +125,7 @@ const listChat = asyncHandler(async (req, res) => {
 const toggleRead = asyncHandler(async (req, res) => {
     try {
 
-        const { id } = req.body;
+        const id = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id || req.body.id;
 
         if (!id) {
             throw new ApiError(400, "Job id is required.");
@@ -137,7 +149,7 @@ const toggleRead = asyncHandler(async (req, res) => {
                 .json(
                     new ApiResponse(
                         200,
-                        null,
+                        { count: 0 },
                         "All messages are already read."
                     )
                 );
@@ -148,7 +160,7 @@ const toggleRead = asyncHandler(async (req, res) => {
             .json(
                 new ApiResponse(
                     200,
-                    readData,
+                    { count: readData.count },
                     `${readData.count} messages marked as read.`
                 )
             );
@@ -162,9 +174,9 @@ const toggleRead = asyncHandler(async (req, res) => {
 const unreadCount = asyncHandler(async (req, res) => {
     try {
 
-        const { repair_job_id } = req.body;
+        const repairJobId = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id;
 
-        if (!repair_job_id) {
+        if (!repairJobId) {
             return res
                 .status(400)
                 .json(
@@ -175,11 +187,11 @@ const unreadCount = asyncHandler(async (req, res) => {
                 );
         }
 
-        await ensureRepairJobAccess(req, repair_job_id);
+        await ensureRepairJobAccess(req, repairJobId);
 
         const countUnread = await prisma.chat.count({
             where: {
-                repairJobId: Number(repair_job_id),
+                repairJobId: Number(repairJobId),
                 isRead: false
             }
         });
@@ -190,7 +202,7 @@ const unreadCount = asyncHandler(async (req, res) => {
                 .json(
                     new ApiResponse(
                         200,
-                        0,
+                        { count: 0 },
                         "No unread messages."
                     )
                 );
@@ -201,7 +213,7 @@ const unreadCount = asyncHandler(async (req, res) => {
             .json(
                 new ApiResponse(
                     200,
-                    countUnread,
+                    { count: countUnread },
                     `${countUnread} unread message(s).`
                 )
             );

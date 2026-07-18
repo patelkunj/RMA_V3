@@ -1,0 +1,181 @@
+name: Load Test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rma-load-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      PORT: "3100"
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/rma_load_test
+      ACCESS_TOKEN_SECRET: load-test-access-secret
+      REFRESH_TOKEN_SECRET: load-test-refresh-secret
+      ACCESS_TOKEN_EXPIRY: 15m
+      REFRESH_TOKEN_EXPIRY: 7d
+      CORS_ORIGIN: http://127.0.0.1:5173
+      RATE_LIMIT_STORE: postgres
+      API_RATE_LIMIT_MAX: "100000"
+      AUTH_RATE_LIMIT_MAX: "1000"
+      UPLOAD_RATE_LIMIT_MAX: "1000"
+      UPLOAD_STORAGE_PROVIDER: local
+      LOCAL_PRIVATE_UPLOAD_ROOT: /tmp/rma-load-test-private-uploads
+      FILE_SCAN_REQUIRED: "false"
+      OUTBOX_WORKER_ENABLED: "false"
+      SLA_WORKER_ENABLED: "false"
+      MAINTENANCE_WORKER_ENABLED: "false"
+      LOG_LEVEL: silent
+      RUN_LOAD_TESTS: "true"
+      LOAD_TEST_BASE_URL: http://127.0.0.1:3100
+      LOAD_TEST_ALLOW_REMOTE: "false"
+      LOAD_TEST_ALLOW_HIGH_INTENSITY: "false"
+      LOAD_TEST_WARMUP_SECONDS: "3"
+      LOAD_TEST_DURATION_SECONDS: "20"
+      LOAD_TEST_TIMEOUT_MS: "5000"
+      LOAD_TEST_MAX_ERROR_RATE: "0.005"
+      LOAD_TEST_MAX_5XX_RATE: "0"
+      LOAD_TEST_MAX_429_RATE: "0"
+      LOAD_TEST_USER_EMAIL: seed.superadmin@example.test
+      LOAD_TEST_USER_PASSWORD: Password123!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql --set ON_ERROR_STOP=1 --command "ALTER USER postgres PASSWORD 'postgres';"
+          sudo -u postgres createdb rma_load_test
+
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm run db:migrate:deploy
+
+      - name: Seed disposable load-test data
+        run: npx prisma db execute --file prisma/seed_pgadmin_test_data.sql --schema prisma/schema.prisma
+
+      - name: Run bounded load profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          PORT=3100 node index.js > artifacts/server-a.log 2>&1 &
+          server_a_pid=$!
+          PORT=3101 node index.js > artifacts/server-b.log 2>&1 &
+          server_b_pid=$!
+
+          cleanup() {
+            kill -TERM "$server_a_pid" "$server_b_pid" 2>/dev/null || true
+            wait "$server_a_pid" 2>/dev/null || true
+            wait "$server_b_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3100/health/ready > /dev/null \
+              && curl --fail --silent --show-error http://127.0.0.1:3101/health/ready > /dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_a_pid" 2>/dev/null || ! kill -0 "$server_b_pid" 2>/dev/null; then
+              echo "An API instance exited before both instances became ready."
+              tail -n 100 artifacts/server-a.log artifacts/server-b.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" != "true" ]; then
+            echo "Both API instances did not become ready within 30 seconds."
+            tail -n 100 artifacts/server-a.log artifacts/server-b.log
+            exit 1
+          fi
+
+          health_a_status=0
+          health_b_status=0
+          auth_a_status=0
+          auth_b_status=0
+
+          LOAD_TEST_BASE_URL=http://127.0.0.1:3100 \
+          LOAD_TEST_PROFILE=health \
+          LOAD_TEST_CONCURRENCY=4 \
+          LOAD_TEST_RPS=10 \
+          LOAD_TEST_MAX_P95_MS=500 \
+          LOAD_TEST_MAX_P99_MS=1000 \
+          LOAD_TEST_MIN_RPS=8 \
+          LOAD_TEST_REPORT_PATH=artifacts/health-a.json \
+          npm run load:test > artifacts/health-a.log 2>&1 &
+          health_a_pid=$!
+
+          LOAD_TEST_BASE_URL=http://127.0.0.1:3101 \
+          LOAD_TEST_PROFILE=health \
+          LOAD_TEST_CONCURRENCY=4 \
+          LOAD_TEST_RPS=10 \
+          LOAD_TEST_MAX_P95_MS=500 \
+          LOAD_TEST_MAX_P99_MS=1000 \
+          LOAD_TEST_MIN_RPS=8 \
+          LOAD_TEST_REPORT_PATH=artifacts/health-b.json \
+          npm run load:test > artifacts/health-b.log 2>&1 &
+          health_b_pid=$!
+
+          wait "$health_a_pid" || health_a_status=$?
+          wait "$health_b_pid" || health_b_status=$?
+
+          LOAD_TEST_BASE_URL=http://127.0.0.1:3100 \
+          LOAD_TEST_PROFILE=authenticated-read \
+          LOAD_TEST_CONCURRENCY=4 \
+          LOAD_TEST_RPS=5 \
+          LOAD_TEST_MAX_P95_MS=750 \
+          LOAD_TEST_MAX_P99_MS=1500 \
+          LOAD_TEST_MIN_RPS=4 \
+          LOAD_TEST_REPORT_PATH=artifacts/authenticated-read-a.json \
+          npm run load:test > artifacts/authenticated-read-a.log 2>&1 &
+          auth_a_pid=$!
+
+          LOAD_TEST_BASE_URL=http://127.0.0.1:3101 \
+          LOAD_TEST_PROFILE=authenticated-read \
+          LOAD_TEST_CONCURRENCY=4 \
+          LOAD_TEST_RPS=5 \
+          LOAD_TEST_MAX_P95_MS=750 \
+          LOAD_TEST_MAX_P99_MS=1500 \
+          LOAD_TEST_MIN_RPS=4 \
+          LOAD_TEST_REPORT_PATH=artifacts/authenticated-read-b.json \
+          npm run load:test > artifacts/authenticated-read-b.log 2>&1 &
+          auth_b_pid=$!
+
+          wait "$auth_a_pid" || auth_a_status=$?
+          wait "$auth_b_pid" || auth_b_status=$?
+
+          if [ "$health_a_status" -ne 0 ] || [ "$health_b_status" -ne 0 ] \
+            || [ "$auth_a_status" -ne 0 ] || [ "$auth_b_status" -ne 0 ]; then
+            echo "One or more load-test profiles failed."
+            tail -n 100 artifacts/health-a.log artifacts/health-b.log \
+              artifacts/authenticated-read-a.log artifacts/authenticated-read-b.log
+            exit 1
+          fi
+
+      - name: Upload load-test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14

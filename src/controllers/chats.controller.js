@@ -1,1 +1,1 @@
-export { insertChat, listChat, toggleRead, unreadCount } from "../services/chatLegacy.service.js";
+export { insertChat, listChat, toggleRead, unreadCount } from "../services/chat-message.service.js";

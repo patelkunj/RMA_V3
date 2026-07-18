@@ -10,6 +10,7 @@ import {
 } from "../controllers/notification.controller.js";
 import { detail as preferenceDetail, update as preferenceUpdate } from "../controllers/notificationPreference.controller.js";
 import { stream } from "../controllers/notificationStream.controller.js";
+import { deprecateRoute } from "../middlewares/deprecation.middleware.js";
 
 const router = Router();
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
@@ -22,16 +23,16 @@ router.put("/preferences", preferenceUpdate);
 router.get("/stream", stream);
 
 router.get("/", listMine);
-router.post("/list", listMine);
 router.get("/unread-count", unreadCount);
-router.post("/unread-count", unreadCount);
-router.patch("/read", markRead);
-
-router.get("/admin/all", authorizeRoles(ADMIN_ROLES), listAll);
-router.post("/admin/list", authorizeRoles(ADMIN_ROLES), listAll);
+router.get("/admin", authorizeRoles(ADMIN_ROLES), listAll);
 router.post("/admin", authorizeRoles(ADMIN_ROLES), createManual);
-// Legacy manual endpoint. Chat notifications are generated internally.
-router.post("/", authorizeRoles(ADMIN_ROLES), createManual);
+
+router.post("/list", deprecateRoute("/api/v1/notifications"), listMine);
+router.post("/unread-count", deprecateRoute("/api/v1/notifications/unread-count"), unreadCount);
+router.patch("/read", deprecateRoute("/api/v1/notifications/{id}/read"), markRead);
+router.get("/admin/all", deprecateRoute("/api/v1/notifications/admin"), authorizeRoles(ADMIN_ROLES), listAll);
+router.post("/admin/list", deprecateRoute("/api/v1/notifications/admin"), authorizeRoles(ADMIN_ROLES), listAll);
+router.post("/", deprecateRoute("/api/v1/notifications/admin"), authorizeRoles(ADMIN_ROLES), createManual);
 router.patch("/:id/read", markRead);
 
 export default router;

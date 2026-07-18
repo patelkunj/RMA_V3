@@ -7,7 +7,8 @@ const sanitizeRequestPath = (value = "") => {
             if (SENSITIVE_QUERY_KEYS.has(key)) url.searchParams.set(key, "[REDACTED]");
         }
         url.pathname = url.pathname
-            .replace(/\/(activeuser|activecustomer|forgetPassword)\/[^/]+/gi, "/$1/[REDACTED]");
+            .replace(/\/(activeuser|activecustomer|forgetPassword|activate|activation)\/[^/]+/gi, "/$1/[REDACTED]")
+            .replace(/\/password-reset\/(?!request(?:\/|$))[^/]+/gi, "/password-reset/[REDACTED]");
         return `${url.pathname}${url.search}`;
     } catch {
         return String(value).split("?")[0];

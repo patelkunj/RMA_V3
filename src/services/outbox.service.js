@@ -136,7 +136,14 @@ const deliverInternalEvent = async (event) => {
     }
 };
 
-const processOutboxBatch = async ({ limit = 20, fetchImpl = fetch, now: suppliedNow } = {}) => {
+// `beforeClaim` is an internal test seam that lets competing workers rendezvous
+// after candidate selection without changing the production claim algorithm.
+const processOutboxBatch = async ({
+    limit = 20,
+    fetchImpl = fetch,
+    now: suppliedNow,
+    beforeClaim,
+} = {}) => {
     const now = suppliedNow ? new Date(suppliedNow) : new Date();
     const candidates = await prisma.outboxEvent.findMany({
         where: {
@@ -148,6 +155,7 @@ const processOutboxBatch = async ({ limit = 20, fetchImpl = fetch, now: supplied
         orderBy: { id: "asc" },
         take: limit,
     });
+    if (beforeClaim) await beforeClaim(candidates);
 
     let processed = 0;
     for (const event of candidates) {

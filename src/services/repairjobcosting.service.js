@@ -27,20 +27,23 @@ const parseBillable = (value, fallback = false) => {
     return value === true || value === "true";
 };
 
-const parseCostValues = ({ quantity, unit_cost, is_billable }, existing = {}) => {
+const parseCostValues = (payload, existing = {}) => {
+    const quantity = payload.quantity;
+    const unitCost = payload.unitCost ?? payload.unit_cost;
+    const isBillable = payload.isBillable ?? payload.billableToCustomer ?? payload.is_billable;
     const parsedQuantity = quantity !== undefined && quantity !== null && quantity !== ""
         ? Number(quantity)
         : existing.quantity ?? 1;
     const parsedUnitCost = money(
-        unit_cost !== undefined && unit_cost !== null && unit_cost !== "" ? unit_cost : existing.unitCost ?? 0,
-        "unit_cost",
+        unitCost !== undefined && unitCost !== null && unitCost !== "" ? unitCost : existing.unitCost ?? 0,
+        "unitCost",
     );
 
     if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0) {
         throw new ApiError(400, "quantity must be a positive integer.");
     }
 
-    const billable = parseBillable(is_billable, existing.billableToCustomer ?? false);
+    const billable = parseBillable(isBillable, existing.billableToCustomer ?? false);
     const totalCost = multiplyMoney(parsedUnitCost, parsedQuantity);
 
     return {
@@ -52,46 +55,40 @@ const parseCostValues = ({ quantity, unit_cost, is_billable }, existing = {}) =>
     };
 };
 
-const listRepairJobCosts = async (req, { repair_job_id, repairJobId }) => {
-    repair_job_id = repair_job_id || repairJobId;
-    if (!repair_job_id) {
-        throw new ApiError(400, "repair_job_id is empty");
+const listRepairJobCosts = async (req, payload) => {
+    const repairJobId = payload.repairJobId ?? payload.repair_job_id;
+    if (!repairJobId) {
+        throw new ApiError(400, "repairJobId is required.");
     }
 
-    await ensureRepairJobAccess(req, repair_job_id);
+    await ensureRepairJobAccess(req, repairJobId);
 
     const costs = await prisma.repairJobCosting.findMany({
-        where: { repairJobId: Number(repair_job_id) },
+        where: { repairJobId: Number(repairJobId) },
         orderBy: { id: "desc" },
         take: 500,
     });
-
-    if (!costs.length) {
-        throw new ApiError(400, "no data found.");
-    }
 
     return costs;
 };
 
 const addRepairJobCost = async (req, payload) => {
-    const {
-        repair_job_id,
-        cost_type,
-        description,
-    } = payload;
+    const repairJobId = payload.repairJobId ?? payload.repair_job_id;
+    const costTypeInput = payload.costType ?? payload.cost_type;
+    const { description } = payload;
 
-    if ([repair_job_id, cost_type, description].some((field) => String(field ?? "").trim() === "")) {
-        throw new ApiError(400, "All field are required");
+    if ([repairJobId, costTypeInput, description].some((field) => String(field ?? "").trim() === "")) {
+        throw new ApiError(400, "repairJobId, costType, and description are required.");
     }
 
-    const costType = normalizeCostType(cost_type);
+    const costType = normalizeCostType(costTypeInput);
     const costValues = parseCostValues(payload);
-    await ensureRepairJobAccess(req, repair_job_id);
+    await ensureRepairJobAccess(req, repairJobId);
 
     return prisma.$transaction(async (tx) => {
         const repairCost = await tx.repairJobCosting.create({
             data: {
-                repairJobId: Number(repair_job_id),
+                repairJobId: Number(repairJobId),
                 costType,
                 ...costValues,
             },
@@ -99,7 +96,7 @@ const addRepairJobCost = async (req, payload) => {
 
         await tx.repairJobAuditLog.create({
             data: {
-                repairJobId: Number(repair_job_id),
+                repairJobId: Number(repairJobId),
                 actionType: "CREATE",
                 description: `Repair cost is added. ${description}`,
                 performedBy: Number(req.user.id),
@@ -111,23 +108,21 @@ const addRepairJobCost = async (req, payload) => {
 };
 
 const updateRepairJobCost = async (req, payload) => {
-    const {
-        id,
-        cost_type,
-        description,
-    } = payload;
+    const id = payload.id;
+    const costTypeInput = payload.costType ?? payload.cost_type;
+    const { description } = payload;
 
-    if ([id, cost_type, description].some((field) => String(field ?? "").trim() === "")) {
-        throw new ApiError(400, "data is empty");
+    if ([id, costTypeInput, description].some((field) => String(field ?? "").trim() === "")) {
+        throw new ApiError(400, "id, costType, and description are required.");
     }
 
-    const costType = normalizeCostType(cost_type);
+    const costType = normalizeCostType(costTypeInput);
     const existing = await prisma.repairJobCosting.findUnique({
         where: { id: Number(id) },
     });
 
     if (!existing) {
-        throw new ApiError(400, "repair cost not found.");
+        throw new ApiError(404, "Repair cost not found.");
     }
 
     await ensureRepairJobAccess(req, existing.repairJobId);

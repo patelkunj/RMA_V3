@@ -2,6 +2,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ensureRepairJobAccess, ensureUserCanAccessOrganization, getAssignedOrganizationIds, isSuperAdmin } from "../utils/accessControl.js";
 import prisma from "../db/prisma.js";
 import { money } from "../utils/money.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const MOVEMENT_TYPES = new Set(["RECEIVE", "RESERVE", "RELEASE", "CONSUME", "ADJUST", "RETURN"]);
 
@@ -26,7 +27,7 @@ const listInventory = async (req, filters = {}) => {
         prisma.inventoryItem.findMany({ where, include: { supplier: true }, orderBy: { name: "asc" }, skip: (page - 1) * limit, take: limit }),
         prisma.inventoryItem.count({ where }),
     ]);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return paginatedData(items, { total, page, limit });
 };
 
 const createInventoryItem = async (req, payload) => {

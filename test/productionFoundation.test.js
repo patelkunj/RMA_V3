@@ -73,6 +73,12 @@ test("request logging redacts activation and query tokens", () => {
     assert.equal(sanitized.includes("top-secret"), false);
     assert.equal(sanitized.includes("also-secret"), false);
     assert.equal(sanitized.includes("safe=yes"), true);
+    assert.equal(sanitizeRequestPath("/api/v1/users/activate/top-secret").includes("top-secret"), false);
+    assert.equal(sanitizeRequestPath("/api/v1/customers/password-reset/top-secret").includes("top-secret"), false);
+    assert.equal(
+        sanitizeRequestPath("/api/v1/customers/password-reset/request"),
+        "/api/v1/customers/password-reset/request",
+    );
 });
 
 test("organization responses expose a scoped logo URL without storage metadata", () => {

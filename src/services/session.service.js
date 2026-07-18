@@ -55,7 +55,9 @@ const createSession = async ({ actor, refreshToken, ipAddress, userAgent, db = p
     });
 };
 
-const refreshUserSession = async (refreshToken) => {
+// Internal coordination callback is used by deterministic multi-process tests;
+// HTTP callers never supply it.
+const refreshUserSession = async (refreshToken, { beforeClaim } = {}) => {
     if (!refreshToken) throw new ApiError(401, "Refresh token is required.");
 
     let decoded;
@@ -96,6 +98,8 @@ const refreshUserSession = async (refreshToken) => {
 
     if (!actor || !actor.isActive || actor.isLocked) throw new ApiError(401, "Account is not active.");
 
+    if (beforeClaim) await beforeClaim();
+
     const accessToken = generateAccessToken(actor);
     const nextRefreshToken = generateRefreshToken(actor);
     const sessionData = {
@@ -104,13 +108,29 @@ const refreshUserSession = async (refreshToken) => {
         lastUsedAt: new Date(),
     };
 
-    if (actorType === "CUSTOMER") {
-        await prisma.customerSession.update({ where: { id: session.id }, data: sessionData });
-    } else {
-        await prisma.sessionManagement.update({
-            where: { id: session.id },
+    const claimed = actorType === "CUSTOMER"
+        ? await prisma.customerSession.updateMany({
+            where: {
+                id: session.id,
+                customerId: Number(decoded.id),
+                refreshTokenHash,
+                revokedAt: null,
+                expiresAt: { gt: new Date() },
+            },
+            data: sessionData,
+        })
+        : await prisma.sessionManagement.updateMany({
+            where: {
+                id: session.id,
+                userId: Number(decoded.id),
+                revokedAt: null,
+                OR: [{ refreshTokenHash }, { refreshToken }],
+                AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
+            },
             data: { ...sessionData, refreshToken: null },
         });
+    if (!claimed.count) {
+        throw new ApiError(401, "Refresh token was already used or revoked.");
     }
 
     return {

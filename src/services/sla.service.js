@@ -13,21 +13,24 @@ const processSlaBreaches = async (limit = 100) => {
     });
     let processed = 0;
     for (const job of jobs) {
-        const result = await prisma.repairJob.updateMany({
-            where: { id: job.id, slaBreachedAt: null },
-            data: { slaBreachedAt: new Date() },
+        const claimed = await prisma.$transaction(async (tx) => {
+            const result = await tx.repairJob.updateMany({
+                where: { id: job.id, slaBreachedAt: null },
+                data: { slaBreachedAt: new Date() },
+            });
+            if (!result.count) return false;
+            await tx.outboxEvent.create({
+                data: {
+                    organizationId: job.organizationId,
+                    eventType: "repair_job.sla_breached",
+                    aggregateType: "RepairJob",
+                    aggregateId: String(job.id),
+                    payload: { repairJobId: job.id, slaDueAt: job.slaDueAt },
+                },
+            });
+            return true;
         });
-        if (!result.count) continue;
-        await prisma.outboxEvent.create({
-            data: {
-                organizationId: job.organizationId,
-                eventType: "repair_job.sla_breached",
-                aggregateType: "RepairJob",
-                aggregateId: String(job.id),
-                payload: { repairJobId: job.id, slaDueAt: job.slaDueAt },
-            },
-        });
-        processed += 1;
+        if (claimed) processed += 1;
     }
     return { selected: jobs.length, processed };
 };

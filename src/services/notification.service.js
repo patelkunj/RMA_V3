@@ -5,6 +5,7 @@ import {
 } from "../utils/accessControl.js";
 import prisma from "../db/prisma.js";
 import { parsePositiveInt } from "../utils/validation.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const RECIPIENT_TYPES = new Set(["USER", "CUSTOMER"]);
 const REFERENCE_TYPES = new Set(["CHAT", "REPAIR_JOB"]);
@@ -113,13 +114,7 @@ const listNotifications = async (req, filters = {}) => {
         prisma.notification.count({ where }),
     ]);
 
-    return {
-        notifications,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-    };
+    return paginatedData(notifications, { total, page, limit }, "notifications");
 };
 
 const createManualNotification = async (req, payload) => {
@@ -275,7 +270,7 @@ const listAllNotifications = async (req, filters = {}) => {
         prisma.notification.count({ where }),
     ]);
 
-    return { notifications, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return paginatedData(notifications, { total, page, limit }, "notifications");
 };
 
 export {

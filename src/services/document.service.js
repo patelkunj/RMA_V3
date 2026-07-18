@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ensureRepairJobAccess } from "../utils/accessControl.js";
 import prisma from "../db/prisma.js";
 import { getPrivateObject, keyFromReference } from "./objectStorage.service.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const publicDir = path.resolve("public");
 
@@ -29,18 +30,24 @@ const listDocuments = async (req, filters = {}) => {
     }
 
     await ensureRepairJobAccess(req, repairJobId);
-
-    return prisma.document.findMany({
-        where: {
-            repairJobId: Number(repairJobId),
-            ...(filters.relatedType ? { relatedType: String(filters.relatedType) } : {}),
-            ...(filters.isActive === undefined ? {} : { isActive: filters.isActive === true || filters.isActive === "true" }),
-        },
-        orderBy: { uploadedDate: "desc" },
-        skip: (Math.max(Number(filters.page) || 1, 1) - 1) * Math.min(Math.max(Number(filters.limit) || 50, 1), 100),
-        take: Math.min(Math.max(Number(filters.limit) || 50, 1), 100),
-        select: documentSelect,
-    });
+    const page = Math.max(Number(filters.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(filters.limit) || 50, 1), 100);
+    const where = {
+        repairJobId: Number(repairJobId),
+        ...(filters.relatedType ? { relatedType: String(filters.relatedType) } : {}),
+        ...(filters.isActive === undefined ? {} : { isActive: filters.isActive === true || filters.isActive === "true" }),
+    };
+    const [documents, total] = await Promise.all([
+        prisma.document.findMany({
+            where,
+            orderBy: { uploadedDate: "desc" },
+            skip: (page - 1) * limit,
+            take: limit,
+            select: documentSelect,
+        }),
+        prisma.document.count({ where }),
+    ]);
+    return paginatedData(documents, { total, page, limit }, "documents");
 };
 
 const getDocumentForAccess = async (req, documentId) => {

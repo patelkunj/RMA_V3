@@ -10,12 +10,13 @@ import {
     sendPasswordResetEmail,
 } from "../services/email.service.js";
 import { generateAccessToken, generateRefreshToken } from "../utils/tokenHandler.js"
-import { assertStrongPassword, assertValidEmail, normalizeEmail } from "../utils/validation.js";
+import { assertStrongPassword, assertValidEmail, normalizeEmail, resolveActiveStatus } from "../utils/validation.js";
 import { logger } from "../utils/logger.js";
 import { createSession } from "../services/session.service.js";
 import { exposeTokensInResponse, generateSecret, hashToken } from "../utils/tokenSecurity.js";
 import { verifyLoginMfa } from "../services/mfa.service.js";
 import { respondWithSafeError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 
 import prisma from "../db/prisma.js";
 import {
@@ -49,6 +50,12 @@ const cookieOptions = () => ({
 const refreshCookieOptions = () => ({ ...cookieOptions(), maxAge: 7 * 24 * 60 * 60 * 1000 });
 const maxFailedLoginAttempts = Number(process.env.AUTH_LOCK_MAX_FAILURES || 5);
 const DUMMY_PASSWORD_HASH = "$2b$10$cVCAFiPlM1fe41WsyhSFgOzl4yT3EGAN89HAHlbJvoUXnYSZfw/IC";
+const parseAssignmentIds = (value, objectKey) => {
+    const entries = Array.isArray(value) ? value : String(value ?? "").split(",");
+    return entries
+        .map((entry) => Number(typeof entry === "object" ? entry?.[objectKey] : String(entry).trim()))
+        .filter(Number.isInteger);
+};
 
 const recordFailedLogin = async (user) => {
     const updated = await prisma.user.update({
@@ -77,13 +84,13 @@ const registerUser = asyncHandler(async (req,res) => {
                 email,
                 mobile,
                 role,
-                assignedCustomerId,
-                assignedOrgId,
             } = req.body
+            const assignedCustomerInput = req.body.assignedCustomerIds ?? req.body.assignedCustomerId;
+            const assignedOrganizationInput = req.body.assignedOrganizationIds ?? req.body.assignedOrgId;
 
 
             // validation of data
-            if([firstName,lastName,email,mobile,role,assignedCustomerId,assignedOrgId].some((field) => String(field ?? "").trim() === "")){
+            if([firstName,lastName,email,mobile,role].some((field) => String(field ?? "").trim() === "")){
                 throw new ApiError(400, "All field are required")
             }
             const normalizedEmail = normalizeEmail(email);
@@ -94,7 +101,7 @@ const registerUser = asyncHandler(async (req,res) => {
             });
 
             if(existingUser){
-                throw new ApiError(400,"User with email address is already exists !!!")
+                throw new ApiError(409, "A user with this email address already exists.")
             }
 
             const password = generateRandomString(12);
@@ -104,8 +111,8 @@ const registerUser = asyncHandler(async (req,res) => {
             const normalizedRole = String(role).trim().toUpperCase();
             if (!["SUPER_ADMIN", "ADMIN", "TECHNICIAN"].includes(normalizedRole)) throw new ApiError(400, "Invalid user role.");
             if (normalizedRole === "SUPER_ADMIN" && req.user.role !== "SUPER_ADMIN") throw new ApiError(403, "Only super administrators can create super administrators.");
-            const orgIds = assignedOrgId.split(",").map(id => Number(id.trim())).filter(Number.isInteger);
-            const customerIds = assignedCustomerId.split(",").map(id => Number(id.trim())).filter(Number.isInteger);
+            const orgIds = parseAssignmentIds(assignedOrganizationInput, "organizationId");
+            const customerIds = parseAssignmentIds(assignedCustomerInput, "customerId");
 
             if (orgIds.length === 0 || customerIds.length === 0) {
                 throw new ApiError(400, "At least one valid organization and customer assignment is required")
@@ -162,7 +169,7 @@ const registerUser = asyncHandler(async (req,res) => {
                 const emailSend = await sendAccountActivationEmail({
                     to: user.email,
                     name: `${user.firstName} ${user.lastName}`,
-                    activationUrl: activationUrl(`/api/v1/users/activeuser/${activationToken}`),
+                    activationUrl: activationUrl(`/api/v1/users/activate/${activationToken}`),
                 });
 
                 log.logStatus =  "Successful";
@@ -196,8 +203,7 @@ const loginUser = asyncHandler( async (req,res)=>{
 
         // validate data
         if(!email || !password){
-            //throw new ApiError(400, " email and password are required")
-            return res.status(400).json(new ApiResponse(400,null, " Email and Password are required"))
+            return res.status(400).json(new ApiError(400, "Email and password are required."))
         }
 
         // check user in db
@@ -212,11 +218,11 @@ const loginUser = asyncHandler( async (req,res)=>{
                 await prisma.systemLog.create({ data: { actorId: user.id, actorRole: user.role, description: "Failed login attempt.", logStatus: "Failure" } });
                 await recordFailedLogin(user);
             }
-            return res.status(401).json(new ApiResponse(401, null, "Invalid email or password."))
+            return res.status(401).json(new ApiError(401, "Invalid email or password."))
         }
 
-        if(!user.isActive) return res.status(403).json(new ApiResponse(403, null, "Account is not active."));
-        if(user.isLocked) return res.status(423).json(new ApiResponse(423, null, "Account is locked."));
+        if(!user.isActive) return res.status(403).json(new ApiError(403, "Account is not active."));
+        if(user.isLocked) return res.status(423).json(new ApiError(423, "Account is locked."));
 
         const log={ actorId: user.id, actorRole:user.role, description : `${user.firstName} ${user.lastName} logged in.` }
 
@@ -240,7 +246,7 @@ const loginUser = asyncHandler( async (req,res)=>{
         })
 
         if(!loggedInUser){
-            throw new ApiError(400, " User not found....")
+            throw new ApiError(404, "User not found.")
         }
 
         await createSession({
@@ -320,7 +326,7 @@ const logoutUser = asyncHandler(async(req,res)=>{
         .clearCookie("refreshToken",options)
         .clearCookie("csrfToken", { ...options, httpOnly: false })
         .json(
-            new ApiResponse(200,{}, "User Logged out")
+            new ApiResponse(200, null, "User logged out successfully.")
         )
 
     } catch (error) {
@@ -617,12 +623,7 @@ const listUser = asyncHandler( async (req, res) =>{
             orderBy: { id: "desc" },
         }), prisma.user.count({ where })]);
 
-        //const users = await User.join("user_customers","user_customers.user_id = users.id").join("user_organizations", "user_organizations.user_id = users.id").find({},['password','activation_token']).execute();
-        if(!users){
-            return res.status(400).json(new ApiError(404, "No User Found"))
-        }
-
-        res.status(200).json(new ApiResponse(200, { users, total, page, limit, totalPages: Math.ceil(total / limit) }, "List of all users"))
+        res.status(200).json(new ApiResponse(200, paginatedData(users, { total, page, limit }, "users"), "Users fetched successfully."))
 
     }catch(error){
         return respondWithSafeError(res, error, "user.list", "Unable to list users.");
@@ -632,7 +633,7 @@ const listUser = asyncHandler( async (req, res) =>{
 
 const getUserById = asyncHandler( async (req, res) =>{
     try{
-        const {id} = req.body
+        const id = req.params.id || req.body?.id
         if(!id)throw new ApiError(400, " Id is empty")
 
         //const user = await User.find({'id':id},['password','activation_token']).execute();
@@ -643,7 +644,7 @@ const getUserById = asyncHandler( async (req, res) =>{
         })
 
         if(!user){
-            return res.status(404).json(new ApiResponse(404, null, " No user found "))
+            return res.status(404).json(new ApiError(404, "User not found."))
         }
 
         return res.status(200).json(new ApiResponse(200, user, " User found"))
@@ -656,19 +657,15 @@ const getUserById = asyncHandler( async (req, res) =>{
 const updateUser = asyncHandler( async (req, res) =>{
     try{
 
-        const {
-            id,
-            first_name,
-            last_name,
-            email,
-            mobile,
-            role,
-            assignedCustomer,
-            assignedOrg,
-            is_active
-        } = req.body
+        const id = req.params.id || req.body?.id;
+        const firstName = req.body.firstName ?? req.body.first_name;
+        const lastName = req.body.lastName ?? req.body.last_name;
+        const assignedCustomers = req.body.assignedCustomerIds ?? req.body.assignedCustomers ?? req.body.assignedCustomer;
+        const assignedOrganizations = req.body.assignedOrganizationIds ?? req.body.assignedOrganizations ?? req.body.assignedOrg;
+        const isActive = req.body.isActive ?? req.body.is_active;
+        const { email, mobile, role } = req.body;
 
-        if([first_name,last_name,email,mobile,role].some((field) => field?.trim() === "")){
+        if (!id || [firstName, lastName, email, mobile, role].some((field) => String(field ?? "").trim() === "")) {
             return res.status(400).json(new ApiError(400,"All field are required" ))
         }
         const normalizedEmail = normalizeEmail(email);
@@ -676,10 +673,10 @@ const updateUser = asyncHandler( async (req, res) =>{
         const target = await ensureUserManagementAccess(req.user, id);
         const normalizedRole = String(role).trim().toUpperCase();
         if (normalizedRole === "SUPER_ADMIN" && !isSuperAdmin(req.user)) throw new ApiError(403, "Only super administrators can grant the super administrator role.");
-        if (target.id === req.user.id && is_active === false) throw new ApiError(409, "You cannot deactivate your own account.");
+        if (target.id === req.user.id && isActive === false) throw new ApiError(409, "You cannot deactivate your own account.");
 
-        const orgIds = (assignedOrg || []).map((entry) => Number(entry.organizationId ?? entry)).filter(Number.isInteger);
-        const customerIds = (assignedCustomer || []).map((entry) => Number(entry.customerId ?? entry)).filter(Number.isInteger);
+        const orgIds = parseAssignmentIds(assignedOrganizations, "organizationId");
+        const customerIds = parseAssignmentIds(assignedCustomers, "customerId");
         await Promise.all(orgIds.map((organizationId) => ensureUserCanAccessOrganization(req.user, organizationId)));
         const validCustomerCount = await prisma.customer.count({ where: { id: { in: customerIds }, organizationId: { in: orgIds } } });
         if (validCustomerCount !== new Set(customerIds).size) throw new ApiError(400, "Every assigned customer must belong to an assigned organization.");
@@ -688,12 +685,12 @@ const updateUser = asyncHandler( async (req, res) =>{
             const updated = await tx.user.update({
             where:{id:Number(id)},
             data:{
-                firstName:first_name,
-                lastName:last_name,
+                firstName,
+                lastName,
                 email:normalizedEmail,
                 mobile:mobile,
                 role:normalizedRole,
-                isActive:is_active
+                isActive
             },
             select: publicUserSelect,
             });
@@ -707,7 +704,7 @@ const updateUser = asyncHandler( async (req, res) =>{
         const log={
             actorId: req.user?.id,
             actorRole: req.user?.role,
-            description : `${req.user?.firstName} ${req.user?.lastName} update the detail of user_id ${req.body.id}`,
+            description : `${req.user?.firstName} ${req.user?.lastName} update the detail of user_id ${id}`,
         }
 
         if(!user){
@@ -729,7 +726,7 @@ const updateUser = asyncHandler( async (req, res) =>{
 const toggleStatus = asyncHandler( async (req, res) =>{
     try {
 
-        const id = req.query.id || req.body.id
+        const id = req.params.id || req.query.id || req.body?.id
 
         if(!id){
             return res.status(400).json(new ApiError(400, "All the field required"));
@@ -742,22 +739,21 @@ const toggleStatus = asyncHandler( async (req, res) =>{
             return res.status(404).json(new ApiError(404, "User not found"));
         }
         if (userData.id === req.user.id) throw new ApiError(409, "You cannot change your own account status.");
+        const nextStatus = resolveActiveStatus(req.body?.isActive, {
+            currentStatus: userData.isActive,
+            isDeprecatedRoute: req.isDeprecatedRoute,
+        });
 
         const user = await prisma.user.update({
             where:{id:Number(id)},
-            data:{isActive:!userData.isActive},
+            data:{isActive: nextStatus},
             select: publicUserSelect,
         })
-
-
-        if(!user){
-            res.status(400).json(new ApiResponse(400, null, "Error while updating user status."))
-        }
 
         const log={
             actorId: req.user.id,
             actorRole: req.user.role,
-            description : `${req.user.firstName} ${req.user.lastName} has ${userData.isActive ? 'deactivated': 'activated'} the user ${userData.firstName} ${userData.lastName}`,
+            description : `${req.user.firstName} ${req.user.lastName} has ${nextStatus ? 'activated' : 'deactivated'} the user ${userData.firstName} ${userData.lastName}`,
             logStatus: "Successful"
         }
         await prisma.systemLog.create({data:log})

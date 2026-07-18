@@ -17,9 +17,32 @@ import { submitRmaRequest, transitionRepairJob } from "../services/repairworkflo
 import { encryptDeviceCredential } from "../utils/encryption.js";
 import prisma from "../db/prisma.js"
 import { respondWithSafeError, safeServiceError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 
 
 const JOB_STATUSES = new Set(["CREATED", "RECEIVED", "IN_PROGRESS", "WAITING_PARTS", "COMPLETED", "CANCELLED"]);
+const firstDefined = (payload, camelCaseKey, legacyKey) => payload?.[camelCaseKey] ?? payload?.[legacyKey];
+const asBoolean = (value) => value === true || value === "true";
+const normalizeRepairJobInput = (payload = {}) => ({
+    organizationId: firstDefined(payload, "organizationId", "organization_id"),
+    customerId: firstDefined(payload, "customerId", "customer_id") ?? payload.Customer_id,
+    storeCode: firstDefined(payload, "storeCode", "store_code"),
+    companyJobNo: firstDefined(payload, "companyJobNo", "company_job_no"),
+    salesInvoice: firstDefined(payload, "salesInvoice", "sales_invoice"),
+    sku: payload.sku,
+    productName: firstDefined(payload, "productName", "product_name"),
+    serialNumber: firstDefined(payload, "serialNumber", "serial_number"),
+    devicePassword: firstDefined(payload, "devicePassword", "device_password"),
+    isDoa: firstDefined(payload, "isDoa", "is_doa"),
+    isProductUnderWarranty: firstDefined(payload, "isProductUnderWarranty", "is_product_under_warranty")
+        ?? payload.is_product_under_waranty,
+    cloudStatus: firstDefined(payload, "cloudStatus", "cloud_status"),
+    cloudDetails: firstDefined(payload, "cloudDetails", "cloud_details"),
+    productFault: firstDefined(payload, "productFault", "product_fault"),
+    videoUrl: firstDefined(payload, "videoUrl", "video_url"),
+    customerTrackingNumber: firstDefined(payload, "customerTrackingNumber", "customer_tracking_number"),
+    jobStatus: firstDefined(payload, "jobStatus", "job_status"),
+});
 
 const getDocumentType = (fileName) => {
     const extension = fileName.toLowerCase();
@@ -47,16 +70,16 @@ const getDocumentType = (fileName) => {
 // for admin,
 const listRepairJob = asyncHandler(async (req, res) => {
     try{
-
-        const status = (req.body.field || "created").toUpperCase()
+        const input = { ...req.body, ...req.query };
+        const status = String(input.status || input.field || "created").toUpperCase()
         // NOTE: uppercased to match the JobStatus enum (CREATED, RECEIVED, IN_PROGRESS, WAITING_PARTS, COMPLETED, CANCELLED)
 
         if (!JOB_STATUSES.has(status)) {
             return res.status(400).json(new ApiError(400, "Invalid repair job status."));
         }
 
-        const page = Math.max(Number(req.body.page) || 1, 1);
-        const limit = Math.min(Math.max(Number(req.body.limit) || 50, 1), 100);
+        const page = Math.max(Number(input.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(input.limit) || 50, 1), 100);
         const skip = (page - 1) * limit;
 
         const where = {
@@ -87,13 +110,11 @@ const listRepairJob = asyncHandler(async (req, res) => {
             updatedDate: moment(job.updatedDate).format('DD-MM-YYYY HH:mm:ss'),
         }))
 
-        return res.status(200).json(new ApiResponse(200, {
-            repairJobs: modifiedData,
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-        }, " List of repair job." ))
+        return res.status(200).json(new ApiResponse(
+            200,
+            paginatedData(modifiedData, { total, page, limit }, "repairJobs"),
+            "Repair jobs fetched successfully.",
+        ))
 
     }catch(error){
         throw safeServiceError(error, "repair-job.list", "Unable to list repair jobs.");
@@ -109,30 +130,27 @@ const insertRepairJob = asyncHandler(async (req, res) => {
         }
         // Extract data from request body
         const {
-            organization_id,
-            customer_id,
-            company_customer_name,   // ⚠️ no equivalent field on RepairJob in the schema — not persisted
-            company_customer_mobile, // ⚠️ no equivalent field on RepairJob in the schema — not persisted
-            store_code,
-            email,
-            company_job_no,          // mapped to customerJobNo — confirm this is the right field
-            sales_invoice,
+            organizationId,
+            customerId,
+            storeCode,
+            companyJobNo,
+            salesInvoice,
             sku,
-            product_name,
-            serial_number,
-            device_password,
-            is_doa,
-            is_product_under_warranty,
-            cloud_status,
-            cloud_details,
-            product_fault,
-            video_url,
-            customer_tracking_number,
-        } = req.body;
+            productName,
+            serialNumber,
+            devicePassword,
+            isDoa,
+            isProductUnderWarranty,
+            cloudStatus,
+            cloudDetails,
+            productFault,
+            videoUrl,
+            customerTrackingNumber,
+        } = normalizeRepairJobInput(req.body);
 
         // Validation of data
-        if ([sales_invoice, sku, product_name,serial_number, product_fault, customer_tracking_number]
-            .some(field => !field?.trim())) {
+        if ([organizationId, customerId, storeCode, salesInvoice, sku, productName, serialNumber, productFault, customerTrackingNumber]
+            .some((field) => String(field ?? "").trim() === "")) {
             return res.status(400).json(new ApiError(400, " Please fill the required field information"))
         }
 
@@ -140,48 +158,48 @@ const insertRepairJob = asyncHandler(async (req, res) => {
             return res.status(403).json(new ApiError(403, "Only internal users can create repair jobs from this endpoint."));
         }
 
-        await ensureUserCanAccessOrganization(req.user, organization_id);
+        await ensureUserCanAccessOrganization(req.user, organizationId);
 
         const customer = await prisma.customer.findFirst({
-            where: { id: Number(customer_id), organizationId: Number(organization_id) },
+            where: { id: Number(customerId), organizationId: Number(organizationId) },
             select: { id: true },
         });
         if (!customer) throw new ApiError(400, "Customer does not belong to the selected organization.");
-        const job_id = await allocateRepairJobNumber(Number(organization_id), store_code);
-        const settings = await prisma.organizationSetting.findUnique({ where: { organizationId: Number(organization_id) } });
+        const job_id = await allocateRepairJobNumber(Number(organizationId), storeCode);
+        const settings = await prisma.organizationSetting.findUnique({ where: { organizationId: Number(organizationId) } });
         const slaDueAt = new Date(Date.now() + Number(settings?.defaultSlaHours || 120) * 3600000);
 
         // Check if the job already exists
         // NOTE: "Dispatch" mapped to COMPLETED (see conversion notes #4)
         const existingJob = await prisma.repairJob.findFirst({
             where: {
-                serialNumber: serial_number,
+                serialNumber,
                 jobStatus: { not: "COMPLETED" },
             },
         });
         if (existingJob) {
-            return res.status(400).json(new ApiError(400, "Repair job already exists"))
+            return res.status(409).json(new ApiError(409, "Repair job already exists."))
         }
 
         // Insert job into the database
         const createdRepairJob = await prisma.repairJob.create({
             data: {
                 raJobId: job_id,
-                organizationId: Number(organization_id),
-                customerId: Number(customer_id),
-                customerJobNo: (company_job_no === 'undefine') ?  null : company_job_no,
-                salesInvoice: (sales_invoice === 'undefine') ? null : sales_invoice,
+                organizationId: Number(organizationId),
+                customerId: Number(customerId),
+                customerJobNo: (companyJobNo === 'undefine') ? null : companyJobNo,
+                salesInvoice: (salesInvoice === 'undefine') ? null : salesInvoice,
                 sku,
-                productName: product_name,
-                serialNumber: (serial_number === 'undefine') ? null : serial_number ,
-                devicePassword: (!device_password || device_password === 'undefine') ? null : encryptDeviceCredential(device_password),
-                isDoa: is_doa === "true",                              // was Number(is_doa === "true") — now a real Boolean
-                isProductUnderWarranty: is_product_under_warranty === 'true', // same fix
-                cloudStatus: cloud_status ?? null,                     // was Number(...); schema field is String?, raw value kept
-                cloudDetails: (cloud_details === 'undefine') ? null : cloud_details,
-                productFault: (product_fault === 'undefine') ? null  : product_fault, // ⚠️ productFault is required (non-nullable) in the schema — null here would throw
-                videoUrl: (video_url === 'undefine') ? null : video_url,
-                customerTrackingNumber: (customer_tracking_number === 'undefine') ? null  : customer_tracking_number,
+                productName,
+                serialNumber: (serialNumber === 'undefine') ? null : serialNumber,
+                devicePassword: (!devicePassword || devicePassword === 'undefine') ? null : encryptDeviceCredential(devicePassword),
+                isDoa: asBoolean(isDoa),
+                isProductUnderWarranty: asBoolean(isProductUnderWarranty),
+                cloudStatus: cloudStatus ?? null,
+                cloudDetails: (cloudDetails === 'undefine') ? null : cloudDetails,
+                productFault: (productFault === 'undefine') ? null : productFault,
+                videoUrl: (videoUrl === 'undefine') ? null : videoUrl,
+                customerTrackingNumber: (customerTrackingNumber === 'undefine') ? null : customerTrackingNumber,
                 createdBy: Number(req.user.id),
                 createdRoleBy: req.user.role,
                 slaDueAt,
@@ -252,32 +270,22 @@ const insertRepairJob = asyncHandler(async (req, res) => {
         // Log the result of the process
         await prisma.systemLog.create({ data: log });
 
-        res.status(200).json(new ApiResponse(200, createdRepairJob, `RA Job ${job_id} created successfully and email sent`));
+        return res.status(201).json(new ApiResponse(201, createdRepairJob, `RA Job ${job_id} created successfully.`));
 
     } catch (error) {
-
-        // Only throw an error if we haven't already sent a response
-        if (!res.headersSent) {
-            logger.error("Repair job creation failed:", error);
-            return res.status(500).json(new ApiError(500, "Internal Server Error"))
-        } else {
-            logger.error("Error occurred after response was sent:", error);
-        }
+        if (!res.headersSent) throw safeServiceError(error, "repair-job.create", "Unable to create repair job.");
+        logger.error("Error occurred after repair job response was sent", { error });
     }
 })
 
 
 const updateRepairJobSKU = asyncHandler(async (req, res) => {
     try {
-
-        const {
-            id,
-            sku
-        } = req.body;
+        const id = req.params.id || req.body?.id;
+        const { sku } = req.body;
 
         // Validation of data
-        if ([id, sku ]
-            .some(field => !field?.trim())) {
+        if ([id, sku].some((field) => String(field ?? "").trim() === "")) {
             return res.status(400).json(new ApiError(400, "All fields are required"));
         }
 
@@ -290,7 +298,7 @@ const updateRepairJobSKU = asyncHandler(async (req, res) => {
             },
         });
         if(!product){
-            return res.status(400).json( new ApiError(400," SKU didn't found in the product list."));
+            return res.status(404).json(new ApiError(404, "Product SKU not found."));
         }
 
         let product_name = product.name
@@ -318,7 +326,7 @@ const updateRepairJobSKU = asyncHandler(async (req, res) => {
             },
         });
 
-        return res.status(200).json(new ApiResponse(200, newSKU, "SKU Update Successfully."))
+        return res.status(200).json(new ApiResponse(200, newSKU, "Repair job SKU updated successfully."))
 
     } catch (error) {
          return respondWithSafeError(res, error, "repair-job.update-sku", "Unable to update repair job.");
@@ -327,23 +335,22 @@ const updateRepairJobSKU = asyncHandler(async (req, res) => {
 
 const updateRepairJobSerialNumber = asyncHandler(async (req, res) => {
     try {
-
-        const { id, serial_number }= req.body
+        const id = req.params.id || req.body?.id;
+        const serialNumber = req.body.serialNumber ?? req.body.serial_number;
         // Validation of data
-        if ([id, serial_number]
-            .some(field => !field?.trim())) {
+        if ([id, serialNumber].some((field) => String(field ?? "").trim() === "")) {
              return res.status(400).json(new ApiError(400, "All fields are required"));
         }
 
         const existingRepairJob = await ensureRepairJobAccess(req, id);
 
         const productSerial = await prisma.productSerial.findUnique({
-            where: { serialNumber: serial_number },
+            where: { serialNumber },
             include: { product: true },
         });
 
         if(!productSerial || !productSerial.product || productSerial.organizationId !== existingRepairJob.organizationId){
-            return res.status(400).json( new ApiError(404," Serial Number didn't found in the Serial Number list."))
+            return res.status(404).json(new ApiError(404, "Serial number not found."))
         }
 
         const log = {
@@ -368,30 +375,29 @@ const updateRepairJobSerialNumber = asyncHandler(async (req, res) => {
 
         // log creation
         await prisma.repairJobAuditLog.create({ data: log });
-        return res.status(200).json(new ApiResponse(200, data, " Serial Number update successfully."))
+        return res.status(200).json(new ApiResponse(200, data, "Repair job serial number updated successfully."))
 
     } catch (error) {
-        return res.status(400).json(new ApiError(400," Error in Update Repair Job Serial Number"))
+        throw safeServiceError(error, "repair-job.update-serial-number", "Unable to update repair job serial number.");
     }
 })
 
 
 const serialNumberLookup = asyncHandler(async (req, res) => {
     try {
-
-        const {serial_number} = req.body
+        const serialNumber = req.body.serialNumber ?? req.body.serial_number;
         // Validation of data
-        if (serial_number == "" || serial_number == undefined ) {
+        if (String(serialNumber ?? "").trim() === "") {
             return res.status(400).json(new ApiError(400, "serial number is required"));
         }
 
         const productSerial = await prisma.productSerial.findUnique({
-            where: { serialNumber: serial_number },
+            where: { serialNumber },
             include: { product: true },
         });
 
         if(!productSerial){
-           return res.status(400).json( new ApiError(400, " serial number is not found."))
+           return res.status(404).json(new ApiError(404, "Serial number not found."))
         }
 
         const hasAccessToSerial = req.customer
@@ -402,20 +408,20 @@ const serialNumberLookup = asyncHandler(async (req, res) => {
             return res.status(403).json(new ApiError(403, "You do not have access to this serial number."));
         }
 
-        return res.status(200).json(new ApiResponse(200, productSerial, " Serial Number found successfully"))
+        return res.status(200).json(new ApiResponse(200, productSerial, "Serial number fetched successfully."))
 
     } catch (error) {
-        return res.status(400).json(new ApiError(400, "Error while looking for serial number"))
+        throw safeServiceError(error, "repair-job.serial-number-lookup", "Unable to look up serial number.");
     }
 })
 
 
 const updateTrackingNumber = asyncHandler(async (req, res) => {
     try {
-
-        const {id,tracking_number} = req.body
+        const id = req.params.id || req.body?.id;
+        const trackingNumber = req.body.trackingNumber ?? req.body.tracking_number;
         // Validation of data
-        if (!tracking_number) {
+        if (!id || !trackingNumber) {
             return res.status(400).json( new ApiError(400, " Tracking number is required"));
         }
 
@@ -423,7 +429,7 @@ const updateTrackingNumber = asyncHandler(async (req, res) => {
 
         const repairjob = await prisma.repairJob.update({
             where: { id: Number(id) },
-            data: { customerTrackingNumber: tracking_number },
+            data: { customerTrackingNumber: trackingNumber },
         });
         if(!repairjob){
             return res.status(400).json( new ApiError(400, " Tracking Number isn't updated successfaully."))
@@ -434,21 +440,22 @@ const updateTrackingNumber = asyncHandler(async (req, res) => {
             data: {
                 repairJobId: Number(id),
                 actionType: "UPDATE",
-                description: `Updated  Tracking Number to ${tracking_number}`,
+                description: `Updated tracking number to ${trackingNumber}`,
                 performedBy: req.user?.id,
             },
         });
 
-        return res.status(200).json(new ApiResponse(200, repairjob, " Tracking Number updated successfaully."))
+        return res.status(200).json(new ApiResponse(200, repairjob, "Tracking number updated successfully."))
 
     } catch (error) {
-        return res.status(500).json(new ApiError(500, "Error while updating tracking number"))
+        throw safeServiceError(error, "repair-job.update-tracking-number", "Unable to update tracking number.");
     }
 })
 
 
 const updateStatus = asyncHandler(async (req, res) => {
-    const { id, status, note } = req.body;
+    const id = req.params.id || req.body?.id;
+    const { status, note } = req.body;
     const repairjob = await transitionRepairJob(req, id, status, note);
     return res.status(200).json(new ApiResponse(200, repairjob, "Status updated successfully."));
 })
@@ -456,10 +463,10 @@ const updateStatus = asyncHandler(async (req, res) => {
 
 const updateDispatchId = asyncHandler(async (req, res) => {
     try {
-
-        const {id,dispatchId} = req.body
+        const id = req.params.id || req.body?.id;
+        const dispatchId = req.body.dispatchId ?? req.body.dispatch_id;
         // Validation of data
-        if ([id, dispatchId].some(field => !field?.trim())) {
+        if ([id, dispatchId].some((field) => String(field ?? "").trim() === "")) {
             return res.status(400).json(new ApiError(400, "All fields are required"));
         }
 
@@ -493,20 +500,20 @@ const updateDispatchId = asyncHandler(async (req, res) => {
             },
         });
         await sendRepairJobStatusEmailSafely(repairjob.id);
-        return res.status(200).json(new ApiResponse(200, repairjob, " Dispatch ID updated successfaully."))
+        return res.status(200).json(new ApiResponse(200, repairjob, "Dispatch ID updated successfully."))
 
     } catch (error) {
-        return res.status(400).json(new ApiError(400, "Error while updating Dispatch ID"))
+        throw safeServiceError(error, "repair-job.update-dispatch-id", "Unable to update dispatch ID.");
     }
 })
 
 
 const receiveJob = asyncHandler(async (req, res) => {
     try {
-
-        const {id,tracking_number } = req.body
+        const id = req.params.id || req.body?.id;
+        const trackingNumber = req.body.trackingNumber ?? req.body.tracking_number;
         // Validation of data
-        if (!tracking_number) {
+        if (!id || !trackingNumber) {
             // NOTE: original had no `return` here at all (not just a typo) — added,
             // since otherwise execution falls through to the update() below.
             return res.status(400).json(new ApiError(400, " Tracking number is required"));
@@ -517,7 +524,7 @@ const receiveJob = asyncHandler(async (req, res) => {
         const repairjob = await prisma.repairJob.update({
             where: { id: Number(id) },
             data: {
-                customerTrackingNumber: tracking_number,
+                customerTrackingNumber: trackingNumber,
                 jobStatus: "RECEIVED",
                 receivedBy: Number(req.user?.id),
                 receivedRoleBy: req.user?.role,
@@ -534,7 +541,7 @@ const receiveJob = asyncHandler(async (req, res) => {
             data: {
                 repairJobId: Number(id),
                 actionType: "STATUS_CHANGE",
-                description: `Receievd Job with Tracking Number - ${tracking_number}`,
+                description: `Received job with tracking number ${trackingNumber}`,
                 performedBy: req.user?.id,
             },
         });
@@ -548,17 +555,17 @@ const receiveJob = asyncHandler(async (req, res) => {
 
         await sendRepairJobStatusEmailSafely(repairjob.id);
         const updateJob = await prisma.repairJob.findUnique({ where: { id: Number(id) } });
-        return res.status(200).json(new ApiResponse(200, updateJob, " Job is received successfaally."))
+        return res.status(200).json(new ApiResponse(200, updateJob, "Repair job received successfully."))
 
     } catch (error) {
-        return res.status(400).json(new ApiError(400, "Error while receiving job in system."))
+        throw safeServiceError(error, "repair-job.receive", "Unable to receive repair job.");
     }
 })
 
 
 const repairJob = asyncHandler(async (req, res) => {
     try {
-        const {id} = req.body
+        const id = req.params.id || req.body?.id;
         if (!id) {
             throw new ApiError(400, "fields is required");
         }
@@ -566,16 +573,16 @@ const repairJob = asyncHandler(async (req, res) => {
         const repairjob = await prisma.repairJob.findUnique({ where: { id: Number(id) } });
 
          if(!repairjob){
-            throw new ApiError(400, " Job is not received successfaully.")
+            throw new ApiError(404, "Repair job not found.")
         }
 
         delete repairjob.devicePassword;
         repairjob.overDueDays = overduedays(repairjob.receivedDate)
 
-        res.status(200).json(new ApiResponse(200, repairjob, " Job is received successfaally."))
+        return res.status(200).json(new ApiResponse(200, repairjob, "Repair job fetched successfully."))
 
     } catch (error) {
-        throw new ApiError(400, "Error while receiving job in system.")
+        throw safeServiceError(error, "repair-job.detail", "Unable to fetch repair job.");
     }
 })
 
@@ -610,19 +617,15 @@ const searchRepairJob = asyncHandler(async (req, res) => {
             take: 100,
         });
 
-        if(!repairjob || repairjob.length === 0){
-            throw new ApiError(400, " No Job found.")
-        }
-
-        res.status(200).json(new ApiResponse(200, repairjob, " Job is found successfaally."))
+        return res.status(200).json(new ApiResponse(200, repairjob, "Repair jobs fetched successfully."))
 
     } catch (error) {
-        throw new ApiError(400, "Error while searching repair job.")
+        throw safeServiceError(error, "repair-job.search", "Unable to search repair jobs.");
     }
 })
 
 
-const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
+const insertMultipleRepairJobs = asyncHandler(async (req, res) => {
     try {
 
         const Jobdata = req.body
@@ -635,11 +638,12 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
             throw new ApiError(403, "Only internal users can create repair jobs.");
         }
 
-        const organizationId = Number(Jobdata.organization_id);
-        const customerId = Number(Jobdata.Customer_id);
+        const jobInput = normalizeRepairJobInput(Jobdata);
+        const organizationId = Number(jobInput.organizationId);
+        const customerId = Number(jobInput.customerId);
 
-        if (!organizationId || !customerId || !Jobdata.store_code) {
-            throw new ApiError(400, "organization_id, Customer_id, and store_code are required.");
+        if (!organizationId || !customerId || !jobInput.storeCode) {
+            throw new ApiError(400, "organizationId, customerId, and storeCode are required.");
         }
 
         await ensureUserCanAccessOrganization(req.user, organizationId);
@@ -656,22 +660,34 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
             throw new ApiError(400, "Customer does not belong to the selected organization.");
         }
 
-        let repairJob, length, job_id;
+        let repairJob, job_id;
         let jobInfo=[];
-
-        if(typeof Jobdata.data === "string"){
-            length=1;
-        }else{
-            length = Jobdata.data.length;
+        const rawItems = Jobdata.items ?? Jobdata.data;
+        if (rawItems === undefined || rawItems === null) {
+            throw new ApiError(400, "items are required.");
         }
+        let entries;
+        try {
+            entries = (Array.isArray(rawItems) ? rawItems : [rawItems]).flatMap((entry) => {
+                const parsed = typeof entry === "string" ? JSON.parse(entry) : entry;
+                return Array.isArray(parsed) ? parsed : [parsed];
+            });
+        } catch {
+            throw new ApiError(400, "items must contain valid JSON objects.");
+        }
+        if (!entries.length) throw new ApiError(400, "items must contain at least one repair job.");
 
-        for(let i=0; i< length; i++){
+        for(let i=0; i< entries.length; i++){
 
-            job_id = await allocateRepairJobNumber(organizationId, Jobdata.store_code)
+            job_id = await allocateRepairJobNumber(organizationId, jobInput.storeCode)
 
-            let inputdata = (length==1) ? JSON.parse(Jobdata.data) : JSON.parse(Jobdata.data[i])
+            const inputdata = normalizeRepairJobInput(entries[i]);
+            if ([inputdata.salesInvoice, inputdata.sku, inputdata.productName, inputdata.serialNumber, inputdata.productFault]
+                .some((field) => String(field ?? "").trim() === "")) {
+                throw new ApiError(400, "Each item requires salesInvoice, sku, productName, serialNumber, and productFault.");
+            }
 
-            const nextStatus = inputdata.job_status ? String(inputdata.job_status).toUpperCase() : "CREATED";
+            const nextStatus = inputdata.jobStatus ? String(inputdata.jobStatus).toUpperCase() : "CREATED";
             if (!JOB_STATUSES.has(nextStatus)) {
                 throw new ApiError(400, "Invalid repair job status.");
             }
@@ -680,12 +696,12 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
             // NOTE: "Dispatch" mapped to COMPLETED, same as insertRepairJob (see conversion notes #4)
             const existingJob = await prisma.repairJob.findFirst({
                 where: {
-                    serialNumber: inputdata.serial_number,
+                    serialNumber: inputdata.serialNumber,
                     jobStatus: { not: "COMPLETED" },
                 },
             });
             if (existingJob) {
-                throw new ApiError(400, "Repair job already exists");
+                throw new ApiError(409, "Repair job already exists.");
             }
 
             repairJob = await prisma.repairJob.create({
@@ -693,20 +709,20 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
                     raJobId: job_id,
                     organizationId,
                     customerId,
-                    customerJobNo: Jobdata.company_job_no,
-                    salesInvoice: inputdata.sales_invoice,
+                    customerJobNo: jobInput.companyJobNo,
+                    salesInvoice: inputdata.salesInvoice,
                     sku: inputdata.sku,
-                    productName: inputdata.product_name,
-                    serialNumber: inputdata.serial_number,
-                    devicePassword: inputdata.device_password ? encryptDeviceCredential(inputdata.device_password) : null,
-                    isDoa: inputdata.is_doa === true || inputdata.is_doa === "true", // normalised to a real Boolean
-                    isProductUnderWarranty: inputdata.is_product_under_waranty === true || inputdata.is_product_under_waranty === "true", // NOTE: kept original typo'd source key "is_product_under_waranty"
+                    productName: inputdata.productName,
+                    serialNumber: inputdata.serialNumber,
+                    devicePassword: inputdata.devicePassword ? encryptDeviceCredential(inputdata.devicePassword) : null,
+                    isDoa: asBoolean(inputdata.isDoa),
+                    isProductUnderWarranty: asBoolean(inputdata.isProductUnderWarranty),
                     // is_product_working: ⚠️ no equivalent field on RepairJob — not persisted
-                    cloudStatus: inputdata.cloud_status ?? null,
-                    cloudDetails: inputdata.cloud_details || null,
-                    productFault: inputdata.product_fault,
-                    videoUrl: inputdata.video_url || null,
-                    customerTrackingNumber: inputdata.customer_tracking_number || null,
+                    cloudStatus: inputdata.cloudStatus ?? null,
+                    cloudDetails: inputdata.cloudDetails || null,
+                    productFault: inputdata.productFault,
+                    videoUrl: inputdata.videoUrl || null,
+                    customerTrackingNumber: inputdata.customerTrackingNumber || null,
                     jobStatus: nextStatus,
                     createdBy: Number(req.user.id),
                     createdRoleBy: req.user.role,
@@ -779,7 +795,7 @@ const insertMultipalReapirJob = asyncHandler( async (req,res) =>{
             // Log the result of the process
             await prisma.systemLog.create({ data: log });
         }
-        return res.status(200).json(new ApiResponse(200, jobInfo, "multiple job data "))
+        return res.status(201).json(new ApiResponse(201, jobInfo, "Repair jobs created successfully."))
 
     } catch (error) {
         throw safeServiceError(error, "repair-job.bulk-create", "Unable to add repair jobs.");
@@ -807,7 +823,7 @@ export {
     updateTrackingNumber,
     updateStatus,
     updateDispatchId,
-    insertMultipalReapirJob,
+    insertMultipleRepairJobs,
     receiveJob,
     searchRepairJob,
     repairJob

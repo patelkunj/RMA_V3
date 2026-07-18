@@ -38,6 +38,7 @@ test("critical production operations remain transactional and tenant scoped", {
         objectStorage,
         outbox,
         encryption,
+        serialNumbers,
     ] = await Promise.all([
         import("../src/db/prisma.js"),
         import("../src/services/billing.service.js"),
@@ -49,13 +50,25 @@ test("critical production operations remain transactional and tenant scoped", {
         import("../src/services/objectStorage.service.js"),
         import("../src/services/outbox.service.js"),
         import("../src/utils/encryption.js"),
+        import("../src/services/serialnumber.service.js"),
     ]);
 
     const suffix = `${process.pid}-${Date.now()}`;
-    const ids = { organizations: [], users: [], customers: [], jobs: [], documents: [], objects: [] };
+    const ids = {
+        organizations: [],
+        users: [],
+        customers: [],
+        jobs: [],
+        documents: [],
+        productSerials: [],
+        products: [],
+        objects: [],
+    };
 
     t.after(async () => {
         if (ids.documents.length) await prisma.document.deleteMany({ where: { id: { in: ids.documents } } });
+        if (ids.productSerials.length) await prisma.productSerial.deleteMany({ where: { id: { in: ids.productSerials } } });
+        if (ids.products.length) await prisma.product.deleteMany({ where: { id: { in: ids.products } } });
         if (ids.organizations.length) {
             await prisma.invoice.deleteMany({ where: { organizationId: { in: ids.organizations } } });
             await prisma.outboxEvent.deleteMany({ where: { organizationId: { in: ids.organizations } } });
@@ -117,6 +130,20 @@ test("critical production operations remain transactional and tenant scoped", {
     ids.jobs.push(billingJob.id, workflowJob.id, tenantBJob.id);
     const requestA = { user: { ...adminA, role: "ADMIN" } };
     const requestB = { user: { ...adminB, role: "ADMIN" } };
+
+    const invokeController = (handler, req) => new Promise((resolve, reject) => {
+        const res = {
+            statusCode: 200,
+            status(code) {
+                this.statusCode = code;
+                return this;
+            },
+            json(body) {
+                resolve({ status: this.statusCode, body });
+            },
+        };
+        handler(req, res, reject);
+    });
 
     await t.test("billing uses decimal-safe totals and serializes concurrent payments", async () => {
         await prisma.repairJobCosting.create({
@@ -212,6 +239,40 @@ test("critical production operations remain transactional and tenant scoped", {
             () => inventory.createInventoryItem(requestA, { organizationId: organizationB.id, sku: `DENIED-${suffix}`, name: "Denied" }),
             (error) => error.statusCode === 403,
         );
+
+        const [productA, productB] = await prisma.$transaction([
+            prisma.product.create({ data: { organizationId: organizationA.id, sku: `SERIAL-A-${suffix}`, name: "Tenant A product" } }),
+            prisma.product.create({ data: { organizationId: organizationB.id, sku: `SERIAL-B-${suffix}`, name: "Tenant B product" } }),
+        ]);
+        ids.products.push(productA.id, productB.id);
+        const protectedSerial = await prisma.productSerial.create({
+            data: {
+                organizationId: organizationB.id,
+                productId: productB.id,
+                serialNumber: `PROTECTED-${suffix}`,
+                salesInvoice: `INV-B-${suffix}`,
+                saleDate: new Date("2026-01-01T00:00:00.000Z"),
+                warrantyExpiry: new Date("2027-01-01T00:00:00.000Z"),
+            },
+        });
+        ids.productSerials.push(protectedSerial.id);
+
+        const attemptedMove = await invokeController(serialNumbers.updateSerialNumber, {
+            ...requestA,
+            params: { id: String(protectedSerial.id) },
+            body: {
+                organizationId: organizationA.id,
+                productId: productA.id,
+                serialNumber: `STOLEN-${suffix}`,
+                salesInvoice: `INV-A-${suffix}`,
+                saleDate: "2026-02-01",
+                warrantyExpiry: "2027-02-01",
+            },
+        });
+        assert.equal(attemptedMove.status, 404);
+        const unchangedSerial = await prisma.productSerial.findUnique({ where: { id: protectedSerial.id } });
+        assert.equal(unchangedSerial.organizationId, organizationB.id);
+        assert.equal(unchangedSerial.serialNumber, `PROTECTED-${suffix}`);
     });
 
     await t.test("outbox retries only failed webhook deliveries", async () => {

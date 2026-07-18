@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { liveness, readiness } from "../services/health.service.js";
 import { renderMetrics } from "../utils/metrics.js";
 import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 import { processOutboxBatch } from "../services/outbox.service.js";
 import { processSlaBreaches } from "../services/sla.service.js";
 
@@ -24,7 +25,13 @@ const metrics = (req, res) => {
     return res.status(200).send(renderMetrics());
 };
 
-const processOutbox = asyncHandler(async (req, res) => res.status(200).json(await processOutboxBatch({ limit: Math.min(Number(req.body.limit) || 20, 100) })));
-const processSla = asyncHandler(async (req, res) => res.status(200).json(await processSlaBreaches(Math.min(Number(req.body.limit) || 100, 500))));
+const processOutbox = asyncHandler(async (req, res) => {
+    const result = await processOutboxBatch({ limit: Math.min(Number(req.body.limit) || 20, 100) });
+    return res.status(200).json(new ApiResponse(200, result, "Outbox batch processed successfully."));
+});
+const processSla = asyncHandler(async (req, res) => {
+    const result = await processSlaBreaches(Math.min(Number(req.body.limit) || 100, 500));
+    return res.status(200).json(new ApiResponse(200, result, "SLA breach batch processed successfully."));
+});
 
 export { live, metrics, processOutbox, processSla, ready };

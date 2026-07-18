@@ -18,10 +18,7 @@ const list = asyncHandler( async(req,res) => {
             orderBy: { performedAt: 'desc' },
         });
 
-        if(!listData || listData.length === 0){
-            return res.status(400).json(new ApiError(400,"no data found."))
-        }
-        return res.status(200).json(new ApiResponse(200,"success",listData));
+        return res.status(200).json(new ApiResponse(200, listData, "Repair job audit logs fetched successfully."));
     } catch (error) {
         return respondWithSafeError(res, error, "repair-job-audit.list", "Unable to list repair job audit logs.");
     }
@@ -48,7 +45,7 @@ const createLog = asyncHandler( async(req,res) => {
             },
         });
 
-        return res.status(201).json(new ApiResponse(201, "Log created successfully", newLog));
+        return res.status(201).json(new ApiResponse(201, newLog, "Repair job audit log created successfully."));
 
     } catch (error) {
         return respondWithSafeError(res, error, "repair-job-audit.create", "Unable to create repair job audit log.");

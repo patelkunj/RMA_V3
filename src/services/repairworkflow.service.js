@@ -6,6 +6,7 @@ import { readTaxRate } from "../config/env.js";
 import { enqueueOutbox } from "./outbox.service.js";
 import prisma from "../db/prisma.js";
 import { calculateTax, money, multiplyMoney, sumMoney } from "../utils/money.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const ALLOWED_TRANSITIONS = {
     CREATED: new Set(["RECEIVED", "CANCELLED"]),
@@ -258,15 +259,24 @@ const reviewRmaRequest = async (req, requestId, decision, note) => {
     const nextStatus = String(decision || "").toUpperCase();
     if (!["ACCEPTED", "REJECTED"].includes(nextStatus)) throw new ApiError(400, "Decision must be ACCEPTED or REJECTED.");
 
-    const request = await prisma.rmaRequest.findUnique({
+    const requestScope = await prisma.rmaRequest.findUnique({
         where: { id: Number(requestId) },
-        include: { customer: { select: { customerCode: true } } },
+        select: { id: true, organizationId: true },
     });
-    if (!request) throw new ApiError(404, "RMA request not found.");
-    await ensureUserCanAccessOrganization(req.user, request.organizationId);
-    if (!["SUBMITTED", "UNDER_REVIEW"].includes(request.status)) throw new ApiError(409, "RMA request has already been reviewed.");
+    if (!requestScope) throw new ApiError(404, "RMA request not found.");
+    await ensureUserCanAccessOrganization(req.user, requestScope.organizationId);
 
     return prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "RmaRequest" WHERE "id" = ${requestScope.id} FOR UPDATE`;
+        const request = await tx.rmaRequest.findUnique({
+            where: { id: requestScope.id },
+            include: { customer: { select: { customerCode: true } } },
+        });
+        if (!request) throw new ApiError(404, "RMA request not found.");
+        if (!["SUBMITTED", "UNDER_REVIEW"].includes(request.status)) {
+            throw new ApiError(409, "RMA request has already been reviewed.");
+        }
+
         let repairJob = null;
         if (nextStatus === "ACCEPTED") {
             const settings = await tx.organizationSetting.findUnique({ where: { organizationId: request.organizationId } });
@@ -332,7 +342,7 @@ const listRmaRequests = async (req, filters = {}) => {
         prisma.rmaRequest.findMany({ where, orderBy: { createdDate: "desc" }, skip: (page - 1) * limit, take: limit }),
         prisma.rmaRequest.count({ where }),
     ]);
-    return { requests, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return paginatedData(requests, { total, page, limit }, "requests");
 };
 
 const getRepairWorkflow = async (req, repairJobId) => {
@@ -391,19 +401,27 @@ const createEstimate = async (req, repairJobId, payload) => {
 
 const decideEstimate = async (req, estimateId, decision, note) => {
     if (!req.customer) throw new ApiError(403, "Only customers can approve or reject estimates.");
-    const estimate = await prisma.repairEstimate.findUnique({
+    const estimateScope = await prisma.repairEstimate.findUnique({
         where: { id: Number(estimateId) },
         include: { repairJob: { select: { customerId: true } } },
     });
-    if (!estimate || estimate.repairJob.customerId !== req.customer.id) throw new ApiError(404, "Estimate not found.");
-    if (estimate.status !== "SENT") throw new ApiError(409, "Estimate is not awaiting a decision.");
-    if (estimate.expiresAt && estimate.expiresAt <= new Date()) throw new ApiError(409, "Estimate has expired.");
+    if (!estimateScope || estimateScope.repairJob.customerId !== req.customer.id) throw new ApiError(404, "Estimate not found.");
     const status = String(decision || "").toUpperCase();
     if (!["APPROVED", "REJECTED"].includes(status)) throw new ApiError(400, "Decision must be APPROVED or REJECTED.");
-    return prisma.repairEstimate.update({
-        where: { id: estimate.id },
-        data: { status, customerNote: String(note || "").trim() || null, decisionAt: new Date() },
-        include: { lines: true },
+    return prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "RepairEstimate" WHERE "id" = ${estimateScope.id} FOR UPDATE`;
+        const estimate = await tx.repairEstimate.findUnique({
+            where: { id: estimateScope.id },
+            include: { repairJob: { select: { customerId: true } } },
+        });
+        if (!estimate || estimate.repairJob.customerId !== req.customer.id) throw new ApiError(404, "Estimate not found.");
+        if (estimate.status !== "SENT") throw new ApiError(409, "Estimate is not awaiting a decision.");
+        if (estimate.expiresAt && estimate.expiresAt <= new Date()) throw new ApiError(409, "Estimate has expired.");
+        return tx.repairEstimate.update({
+            where: { id: estimate.id },
+            data: { status, customerNote: String(note || "").trim() || null, decisionAt: new Date() },
+            include: { lines: true },
+        });
     });
 };
 

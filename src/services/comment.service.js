@@ -6,6 +6,7 @@ import { removeStoredFiles, storeUploadedFiles } from "../utils/fileUpload.js";
 import { generateRandomString } from "../utils/common.js";
 import { ensureRepairJobAccess } from "../utils/accessControl.js";
 import { respondWithSafeError } from "../utils/safeError.js";
+import { paginatedData } from "../utils/pagination.js";
 
 const getDocumentType = (fileName) => {
     const extension = fileName.toLowerCase();
@@ -34,9 +35,10 @@ const insertComment = asyncHandler(async (req, res) => {
     let uploadFiles = [];
     try {
 
-        const { repair_job_id, message } = req.body;
+        const repairJobId = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id;
+        const { message } = req.body;
 
-        if (!repair_job_id) {
+        if (!repairJobId) {
             return res
                 .status(400)
                 .json(new ApiError(400, "Job id is required."));
@@ -54,16 +56,16 @@ const insertComment = asyncHandler(async (req, res) => {
                 .json(new ApiError(400, "Comment message is required."));
         }
 
-        await ensureRepairJobAccess(req, repair_job_id);
+        await ensureRepairJobAccess(req, repairJobId);
 
         if (req.files?.length > 0) {
-            uploadFiles = await storeUploadedFiles(req.files, repair_job_id, "comment");
+            uploadFiles = await storeUploadedFiles(req.files, repairJobId, "comment");
         }
 
         const comment = await prisma.$transaction(async (tx) => {
             const createdComment = await tx.repairJobComment.create({
                 data: {
-                    repairJobId: Number(repair_job_id),
+                    repairJobId: Number(repairJobId),
                     userId: req.user.id,
                     comment: message.trim()
                 }
@@ -73,7 +75,7 @@ const insertComment = asyncHandler(async (req, res) => {
                 for (const file of uploadFiles) {
                     await tx.document.create({
                         data: {
-                            repairJobId: Number(repair_job_id),
+                            repairJobId: Number(repairJobId),
                             relatedType: "repair_comment",
                             relatedId: createdComment.id,
                             documentName: file.name,
@@ -91,10 +93,10 @@ const insertComment = asyncHandler(async (req, res) => {
         });
 
         return res
-            .status(200)
+            .status(201)
             .json(
                 new ApiResponse(
-                    200,
+                    201,
                     comment,
                     "Comment sent successfully."
                 )
@@ -111,9 +113,9 @@ const insertComment = asyncHandler(async (req, res) => {
 const listComment = asyncHandler(async (req, res) => {
     try {
 
-        const { id } = req.body;
-        const page = Math.max(Number(req.body.page) || 1, 1);
-        const limit = Math.min(Math.max(Number(req.body.limit) || 100, 1), 100);
+        const id = req.params.repairJobId || req.body.repairJobId || req.body.repair_job_id || req.body.id;
+        const page = Math.max(Number(req.query.page || req.body.page) || 1, 1);
+        const limit = Math.min(Math.max(Number(req.query.limit || req.body.limit) || 100, 1), 100);
 
         if (!id) {
             return res
@@ -123,25 +125,25 @@ const listComment = asyncHandler(async (req, res) => {
 
         await ensureRepairJobAccess(req, id);
 
-        const comments = await prisma.repairJobComment.findMany({
-            where: {
-                repairJobId: Number(id)
-            },
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true
+        const where = { repairJobId: Number(id) };
+        const [comments, total] = await Promise.all([
+            prisma.repairJobComment.findMany({
+                where,
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true
+                        }
                     }
-                }
-            },
-            orderBy: {
-                createdDate: "asc"
-            },
-            skip: (page - 1) * limit,
-            take: limit,
-        });
+                },
+                orderBy: { createdDate: "asc" },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+            prisma.repairJobComment.count({ where }),
+        ]);
 
         const documents = await prisma.document.findMany({
             where: {
@@ -176,8 +178,10 @@ const listComment = asyncHandler(async (req, res) => {
         return res.status(200).json(
             new ApiResponse(
                 200,
-                commentsWithDocuments,
-                "List of comments."
+                req.isDeprecatedRoute
+                    ? commentsWithDocuments
+                    : paginatedData(commentsWithDocuments, { total, page, limit }, "comments"),
+                "Comments fetched successfully."
             )
         );
 
@@ -190,7 +194,8 @@ const listComment = asyncHandler(async (req, res) => {
 const updateComment = asyncHandler(async (req, res) => {
     try {
 
-        const { id, message } = req.body;
+        const id = req.params.id || req.body.id;
+        const { message } = req.body;
 
         if (!id || !message?.trim()) {
             return res.status(400).json(

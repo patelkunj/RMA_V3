@@ -35,11 +35,24 @@ const verifyLoginMfa = async (actor, code) => {
     if (actor.mfaSecretCiphertext && verifyTotp(decryptMfaSecret(actor.mfaSecretCiphertext), code)) return { verified: true };
     const recoveryHash = hashToken(String(code).trim().toUpperCase());
     if (actor.mfaRecoveryCodeHashes.includes(recoveryHash)) {
-        await actorModel(actor).update({
-            where: { id: actor.id },
-            data: { mfaRecoveryCodeHashes: actor.mfaRecoveryCodeHashes.filter((hash) => hash !== recoveryHash) },
-        });
-        return { verified: true, recoveryCodeUsed: true };
+        const consumed = actor.role === "CUSTOMER"
+            ? await prisma.$executeRaw`
+                UPDATE "Customer"
+                SET "mfaRecoveryCodeHashes" = array_remove("mfaRecoveryCodeHashes", ${recoveryHash}),
+                    "updatedDate" = NOW()
+                WHERE "id" = ${Number(actor.id)}
+                  AND "mfaEnabled" = true
+                  AND ${recoveryHash} = ANY("mfaRecoveryCodeHashes")
+            `
+            : await prisma.$executeRaw`
+                UPDATE "User"
+                SET "mfaRecoveryCodeHashes" = array_remove("mfaRecoveryCodeHashes", ${recoveryHash}),
+                    "updatedDate" = NOW()
+                WHERE "id" = ${Number(actor.id)}
+                  AND "mfaEnabled" = true
+                  AND ${recoveryHash} = ANY("mfaRecoveryCodeHashes")
+            `;
+        if (consumed) return { verified: true, recoveryCodeUsed: true };
     }
     throw new ApiError(401, "MFA code is invalid.");
 };
