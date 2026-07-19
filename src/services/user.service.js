@@ -620,7 +620,7 @@ const listUser = asyncHandler( async (req, res) =>{
             select: publicUserSelect,
             skip: (page - 1) * limit,
             take: limit,
-            orderBy: { id: "desc" },
+            orderBy: { id: "asc" },
         }), prisma.user.count({ where })]);
 
         res.status(200).json(new ApiResponse(200, paginatedData(users, { total, page, limit }, "users"), "Users fetched successfully."))
