@@ -2,39 +2,44 @@
   "name": "rma_backend",
   "version": "1.0.0",
   "description": "RMA Application",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "main": "index.js",
   "type": "module",
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "node --test",
-    "syntax:check": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "test:coverage": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-lines=35 --test-coverage-functions=20 --test-coverage-branches=25 test/*.test.js",
+    "load:test": "node scripts/load-test.js",
+    "syntax:check": "find src test scripts -name '*.js' -print0 | xargs -0 -n1 node --check",
     "verify": "npm run prisma:validate && npm run syntax:check && npm test",
     "prisma:validate": "prisma validate",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status"
   },
   "author": "kunj patel",
   "license": "ISC",
   "dependencies": {
-    "@prisma/adapter-pg": "^7.8.0",
+    "@aws-sdk/client-s3": "^3.1090.0",
     "@prisma/client": "^6.19.3",
-    "@prisma/config": "^7.8.0",
-    "axios": "^1.8.4",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",
     "multer": "^1.4.5-lts.1",
-    "mysql2": "^3.12.0",
-    "nodemailer": "^6.10.0",
-    "nodemon": "^3.1.9",
+    "nodemailer": "^9.0.3",
+    "pdfkit": "^0.19.1",
     "pg": "^8.22.0",
-    "prisma": "^6.19.3",
-    "sequelize": "^6.37.8",
-    "sqlite3": "^6.0.1",
-    "xlsx": "^0.18.5"
+    "prisma": "^6.19.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }

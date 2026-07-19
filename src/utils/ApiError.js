@@ -5,17 +5,26 @@ class ApiError extends Error{
             errors = [],
             stack =""
     ){
-        super(message)
-        this.statusCode = statusCode
+        super(typeof message === "string" && message.trim() ? message : "Something went wrong")
+        this.statusCode = Number.isInteger(statusCode) && statusCode >= 400 && statusCode <= 599 ? statusCode : 500
         this.data = null
-        this.message = message
         this.success = false;
-        this.errors = errors
+        this.errors = Array.isArray(errors) ? errors : []
 
         if(stack){
             this.stack = stack
         }else{
             Error.captureStackTrace(this, this.constructor)
+        }
+    }
+
+    toJSON(){
+        return {
+            statusCode: this.statusCode,
+            data: null,
+            message: this.message,
+            success: false,
+            errors: this.errors,
         }
     }
 }

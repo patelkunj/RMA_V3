@@ -3,6 +3,8 @@ import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { authorizeRoles } from "../middlewares/authorisation.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { uploadRateLimit } from "../middlewares/rateLimit.middleware.js";
+import { scanUploads } from "../middlewares/uploadSecurity.middleware.js";
+import { deprecateRoute } from "../middlewares/deprecation.middleware.js";
 import {
     insertSerialNumber,
     listSerialNumber,
@@ -17,8 +19,17 @@ router.use(verifyJWT, authorizeRoles(ADMIN_ROLES));
 
 router.get("/", listSerialNumber);
 router.post("/", insertSerialNumber);
-router.put("/", updateSerialNumber);
-router.post("/upload_serialnumber", uploadRateLimit, upload.single("file"), uploadSerialNumber);
-router.post("/upload", uploadRateLimit, upload.single("file"), uploadSerialNumber);
+router.post("/upload", uploadRateLimit, upload.single("file"), scanUploads, uploadSerialNumber);
+router.post(
+    "/upload_serialnumber",
+    deprecateRoute("/api/v1/serial-numbers/upload"),
+    uploadRateLimit,
+    upload.single("file"),
+    scanUploads,
+    uploadSerialNumber,
+);
+router.put("/", deprecateRoute((req) => `/api/v1/serial-numbers/${req.body?.id || "{id}"}`), updateSerialNumber);
+
+router.put("/:id", updateSerialNumber);
 
 export default router;

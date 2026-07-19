@@ -1,5 +1,6 @@
 //const { v4: uuidv4 } = require("uuid");
 import moment from "moment";
+import { randomInt } from "crypto";
 // * config files
 //const dbPool = require("../config/dbPool");
 //const constEnum = require("../constant/enum");
@@ -57,7 +58,7 @@ const generateRandomString = function (length) {
   let result = '';
   const charactersLength = characters.length;
   for (let i = 0; i < length; i++) {
-      result += characters.charAt(Math.floor(Math.random() * charactersLength));
+      result += characters.charAt(randomInt(charactersLength));
   }
   return result;
 }

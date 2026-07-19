@@ -35,7 +35,7 @@ test/
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL
 - npm
 
@@ -148,6 +148,25 @@ npm run syntax:check
 npm test
 ```
 
+## Production capabilities
+
+The API now includes customer RMA intake and review, technician assignment, an enforced repair state machine, SLA monitoring, inspection/diagnosis/repair/QA work logs, estimates and customer approval, inventory movements, shipment tracking, persistent invoices and payments, tenant configuration and private organization logos used in generated PDFs, API keys and signed webhooks, a transactional outbox, idempotency protection, notification preferences and SSE delivery, privacy workflows, private document downloads, health/readiness checks, metrics, durable rate limiting, and graceful shutdown.
+
+Apply the production migration before deploying:
+
+```bash
+npm run prisma:generate
+npm run db:migrate:deploy
+```
+
+The API contract is served at `/api-docs/openapi.json`. Operational guidance, backups, monitoring, scaling, and release procedures are documented in `docs/production.md`.
+
+Organization administrators can upload a PNG or JPEG logo (maximum 2 MB) with `PUT /api/v1/organizations/:id/logo`. Logos are tenant-scoped, privately stored, and rendered on invoice and service-report PDFs. Authenticated tenant actors can retrieve the logo from `GET /api/v1/organizations/:id/logo`.
+
+State-changing creation/payment/import endpoints require an `Idempotency-Key` header. Browser clients using authentication cookies must echo the readable `csrfToken` cookie in `X-CSRF-Token`; bearer-token clients do not require the CSRF header. Internal users and customers can enable TOTP MFA under `/api/v1/mfa`.
+
+Customer login and password-reset initiation require `organizationId` together with the normalized customer email. This is required because customer email addresses are unique within an organization rather than globally. Use `POST /api/v1/customers/password-reset/request`; the legacy `/getCustomerDetail` alias remains available temporarily with the same tenant-aware body.
+
 ## Postman
 
 Import this collection into Postman:
@@ -162,6 +181,8 @@ Recommended flow:
 2. Run `Users / Login User`.
 3. The collection stores `accessToken` automatically.
 4. Run protected requests.
+
+Primary collection folders use canonical routes and camelCase fields. The **Legacy Compatibility (Deprecated)** folder exists only to help verify older clients during migration; its requests should not be copied into new integrations.
 
 The collection uses seeded IDs such as:
 
@@ -187,15 +208,27 @@ Mounted routers:
 /customers
 /organizations
 /products
-/serialnumbers
-/repairjobs
-/repairjobcost
+/serial-numbers
+/repair-jobs
+/repair-job-costs
 /chats
 /comments
 /reports
+/notifications
+/documents
+/repair-job-timeline
+/sessions
+/inventory
+/shipments
+/billing
+/organization-settings
+/integrations
+/privacy
+/mfa
+/operations
 ```
 
-Some legacy route names are still supported for frontend compatibility. New route work should prefer REST-style, lowercase, kebab-case paths.
+Legacy prefixes and action-style routes remain available temporarily for client migration and return `Deprecation`, `Sunset`, `Link`, and `Warning` headers. New integrations should use the REST-style, lowercase, kebab-case paths above and camelCase request fields. See [API migration guide](docs/api-migration.md) for the complete canonical-to-legacy mapping and sunset policy.
 
 ## Reports
 
@@ -213,19 +246,29 @@ Current reports:
 - `/costs`
 - `/products`
 - `/customers`
+- `/repair-jobs/:repairJobId/service-report.pdf`
+- `/repair-jobs/:repairJobId/invoice.pdf`
+- `POST /repair-jobs/:repairJobId/invoice/email`
 
-Reports support query or body filters such as:
+JSON report endpoints use query parameters for filters and pagination, for example:
 
-```json
-{
-  "startDate": "2026-01-01",
-  "endDate": "2026-12-31",
-  "organizationId": 9001,
-  "customerId": 9401,
-  "page": 1,
-  "limit": 20
-}
+```text
+GET /api/v1/reports/summary?startDate=2026-01-01&endDate=2026-12-31&organizationId=9001
 ```
+
+## Added Operational APIs
+
+New supporting API areas:
+
+- `/api/v1/sessions`: refresh user access tokens, list sessions, revoke one session, or revoke all sessions.
+- `/api/v1/notifications`: list the signed-in recipient's notifications, create manual admin notifications, mark read, and fetch unread count. Chat notifications are generated automatically when a chat message or attachment is created.
+- `/api/v1/documents`: list, inspect, download, and deactivate repair-job documents with repair-job access checks.
+- `/api/v1/repair-job-timeline`: fetch repair-job audit logs and status tracking history.
+- `/api/v1/reports/repair-jobs/:repairJobId/service-report.pdf`: download a repair-job service report PDF.
+- `/api/v1/reports/repair-jobs/:repairJobId/invoice.pdf`: download a repair-job invoice PDF.
+- `POST /api/v1/reports/repair-jobs/:repairJobId/invoice/email`: email the customer a billing message with the generated PDF invoice attached (Admin/Super Admin).
+
+Account activation, password reset, repair-status, and billing emails share the responsive RMA email layout in `src/templates/email.templates.js`. Set `CUSTOMER_PORTAL_URL` for repair-job links and configure the `EMAIL_*` and `INVOICE_*` variables documented in `.env.example`.
 
 ## Code Conventions
 
@@ -251,11 +294,11 @@ AGENTS.md
 - Never commit `.env` or secrets.
 - Never log passwords, JWTs, reset tokens, activation tokens, cookies, request bodies, or uploaded file contents.
 - Use `src/utils/logger.js` for application logging.
-- Keep `LOG_TO_FILE=false` in container/cloud deployments unless local file logging is specifically required.
+- Keep `LOG_TO_FILE=false` in cloud deployments unless local file logging is specifically required.
 
 ## File Uploads
 
-Runtime uploads are stored under `public/uploads` and temporary uploads under `public/temp`. These should not be committed.
+Private uploads are stored through the configured storage provider. Production requires `UPLOAD_STORAGE_PROVIDER=s3`, a private S3 or S3-compatible bucket, and workload-role credentials (preferred) or an explicit access-key pair. Objects are encrypted server-side and are returned only through authenticated, tenant-scoped download endpoints. Local development and tests may use `UPLOAD_STORAGE_PROVIDER=local`, which stores private objects under `var/private-uploads`. Multer request staging remains under `public/temp`; neither location is committed.
 
 Upload routes must use:
 
@@ -270,7 +313,18 @@ Upload routes must use:
 Tests use Node's built-in test runner:
 
 ```bash
+npm run verify
+```
+
+The customer tenant-authentication, critical-operations, business-concurrency, and multi-instance suites require a dedicated PostgreSQL test database and refuse database names that do not contain `test` or `integration`:
+
+```bash
+RUN_DB_INTEGRATION_TESTS=true \
+RUN_HTTP_INTEGRATION_TESTS=true \
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/rma_test \
 npm test
 ```
 
-Prefer deterministic tests that do not require a live production database.
+The suites cover billing/payment precision and locking, invoice and workflow races, MFA and refresh-token single use, inventory reservation locking and idempotency, two-process PostgreSQL rate limiting, competing workers, private uploads, tenant permissions, and outbox retries. CI enables these tests after applying all Prisma migrations. Ordinary local test runs safely skip database and loopback HTTP operations.
+
+Run `npm run test:coverage` for the enforced coverage baseline. The opt-in bounded load runner, safety controls, profiles, thresholds, and nightly workflow are documented in [docs/testing.md](docs/testing.md). Never run integration or load tests against a production database or production API.

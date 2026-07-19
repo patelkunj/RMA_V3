@@ -32,9 +32,26 @@ const parsePositiveInt = (value, fieldName) => {
     return parsed;
 };
 
+const parseOptionalBoolean = (value, fieldName = "value") => {
+    if (value === undefined) return undefined;
+    if (value === true || value === false) return value;
+    if (value === "true") return true;
+    if (value === "false") return false;
+    throw new ApiError(400, `${fieldName} must be a boolean.`);
+};
+
+const resolveActiveStatus = (value, { currentStatus, isDeprecatedRoute = false } = {}) => {
+    const parsedStatus = parseOptionalBoolean(value, "isActive");
+    if (parsedStatus !== undefined) return parsedStatus;
+    if (!isDeprecatedRoute) throw new ApiError(400, "isActive is required.");
+    return !currentStatus;
+};
+
 export {
     assertStrongPassword,
     assertValidEmail,
     normalizeEmail,
+    parseOptionalBoolean,
     parsePositiveInt,
+    resolveActiveStatus,
 };

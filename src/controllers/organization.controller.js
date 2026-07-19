@@ -1,220 +1,76 @@
-import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import prisma from "../db/prisma.js";
 import {
-    ensureUserCanAccessOrganization,
-    getAssignedOrganizationIds,
-    isSuperAdmin,
-} from "../utils/accessControl.js";
+    createOrganization as createOrganizationRecord,
+    getOrganization,
+    getOrganizationLogo,
+    listOrganizations,
+    removeOrganizationLogo,
+    toggleOrganizationStatus,
+    updateOrganizationRecord,
+    uploadOrganizationLogo,
+} from "../services/organization.service.js";
 
-
-// add pagination
 const listOrganization = asyncHandler(async (req, res) => {
-
-    try {
-        const page = Math.max(Number(req.query.page) || 1, 1);
-        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
-        const skip = (page - 1) * limit;
-
-        const organizationIds = isSuperAdmin(req.user)
-            ? []
-            : await getAssignedOrganizationIds(req.user);
-
-        const where = isSuperAdmin(req.user)
-            ? {}
-            : { id: { in: organizationIds } };
-
-        const [org, total] = await Promise.all([
-            prisma.organization.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy: { name: "asc" },
-            }),
-            prisma.organization.count({ where }),
-        ]);
-
-        return res.status(200).json(
-            new ApiResponse(200, {
-                organizations: org,
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            }, "List of all organizations")
-        );
-
-    } catch (error) {
-        res.status(400).json(new ApiError(400, "Error while listing organization", error?.message ))
-    }
+    const result = await listOrganizations(req, req.query);
+    return res.status(200).json(new ApiResponse(200, result, "List of all organizations"));
 });
 
-const creatOrganization = asyncHandler(async (req, res) => {
-
-    try {
-        const { name, alias, address, email, phone, isActive } = req.body;
-
-        if (!name || !alias) {
-            throw new ApiError(400, "Name and alias are required");
-        }
-
-        const org = await prisma.organization.create({
-            data: {
-                name,
-                alias,
-                address,
-                email,
-                phone,
-                isActive: Boolean(isActive)
-            }
-        });
-
-        return res.status(201).json(
-            new ApiResponse(201, org, "Organization created successfully")
-        );
-    } catch (error) {
-        res.status(400).json(new ApiError(400, "Error while creating organization.", error?.message ))
-    }
-
-
-    
+const createOrganization = asyncHandler(async (req, res) => {
+    const organization = await createOrganizationRecord(req, req.body);
+    return res.status(201).json(new ApiResponse(201, organization, "Organization created successfully"));
 });
-
 
 const updateOrganization = asyncHandler(async (req, res) => {
-
-    try {
-        const { id, name, alias, address, email, phone } = req.body;
-
-        if (!id) {
-            throw new ApiError(400, "ID is required");
-        }
-
-        await ensureUserCanAccessOrganization(req.user, id);
-
-        const org = await prisma.organization.update({
-            where: { id: Number(id) },
-            data: {
-                name,
-                alias,
-                address,
-                email,
-                phone
-            }
-        });
-
-        return res.status(200).json(
-            new ApiResponse(200, org, "Organization updated successfully")
-        );
-    } catch (error) {
-        res.status(400).json(new ApiError(400, "Error while updating organization.", error?.message ))
-    }
-
-    
+    const organization = await updateOrganizationRecord(req, {
+        ...req.body,
+        id: req.params.id ?? req.body?.id,
+    });
+    return res.status(200).json(new ApiResponse(200, organization, "Organization updated successfully"));
 });
-
 
 const toggleStatus = asyncHandler(async (req, res) => {
-
-    try {
-        const { id} = req.body;
-
-        if (!id) {
-            throw new ApiError(400, "ID is required");
-        }
-
-        const orgData = await prisma.organization.findUnique({
-            where:{id:Number(id)}
-        })
-
-        if(!orgData){
-            return res.status(404).json(new ApiError(404, "Organization not found"));
-        }
-
-        const org = await prisma.organization.update({
-            where:{id:Number(id)},
-            data:{isActive:Boolean(!orgData.isActive)}
-        });
-
-        return res.status(200).json(
-            new ApiResponse(200, org, "Status updated successfully")
-        );
-    } catch (error) {
-        res.status(400).json(new ApiError(400, "Error while changing status of organization. ", error?.message ))
-    }
+    const organization = await toggleOrganizationStatus(
+        req,
+        req.params.id ?? req.query.id ?? req.body?.id,
+        req.body?.isActive,
+    );
+    return res.status(200).json(new ApiResponse(200, organization, "Status updated successfully"));
 });
 
+const getOrganizationDetail = asyncHandler(async (req, res) => {
+    const organization = await getOrganization(req, req.params.id);
+    return res.status(200).json(new ApiResponse(200, organization, "Organization data found."));
+});
 
-const getOrganizationDetail = asyncHandler(async (req, res)=> {
+const uploadLogo = asyncHandler(async (req, res) => {
+    const organization = await uploadOrganizationLogo(req, req.params.id, req.file);
+    return res.status(200).json(new ApiResponse(200, organization, "Organization logo updated successfully."));
+});
 
-    try {
-        const {id} = req.params;
+const downloadLogo = asyncHandler(async (req, res) => {
+    const logo = await getOrganizationLogo(req, req.params.id);
+    if (req.headers["if-none-match"] === logo.etag) return res.status(304).end();
+    res.setHeader("Content-Type", logo.mimeType);
+    res.setHeader("Content-Length", logo.size);
+    res.setHeader("Cache-Control", "private, max-age=3600, must-revalidate");
+    res.setHeader("ETag", logo.etag);
+    if (logo.updatedAt) res.setHeader("Last-Modified", new Date(logo.updatedAt).toUTCString());
+    return res.status(200).send(logo.buffer);
+});
 
-        if(!id){
-            return res.status(400).json(new ApiError(400, " organization data not found"))
-        }
-
-        await ensureUserCanAccessOrganization(req.user, id);
-
-        const orgData = await prisma.organization.findUnique({
-            where:{id:Number(id)}
-        })
-
-        if(!orgData){
-            return res.status(200).json(new ApiResponse(200, null, " Organization detail not found."))
-        }
-        return res.status(200).json(new ApiResponse(200, orgData, "Organization data found."));
-
-    } catch (error) {
-        res.status(400).json(new ApiError(400, "Error while getting detail of organization. ", error?.message ))
-    }
-
-
-})
-
-
-// const searchCompany = asyncHandler(async(req,res)=>{
-//     try {
-//         const searchTerm = req.body
-
-//         if(!searchTerm){
-//             throw new ApiError(400, " search in empty.")
-//         }
-
-//         const org = await Organization.search(searchTerm)
-
-//         if(!org){
-//             res.status(404).json(new ApiResponse(404, null, " No company found"))
-//         }
-
-//         res.status(200).json(new ApiResponse(200, org, " company found"))
-
-//     } catch (error) {
-//         throw new ApiError(400, " Error in seach company")
-//     }
-// })
-
-
-// const allCompany = asyncHandler(async(req,res)=>{
-//     try {
-//         const org = await Organization.find()
-//         if(!org){
-//             res.status(404).json(new ApiResponse(404, null, " No company found"))
-//         }
-//         res.status(200).json(new ApiResponse(200, org, " company found"))
-        
-//     } catch (error) {
-//         throw new ApiError(400," Error in all company list")   
-//     }
-// })
+const deleteLogo = asyncHandler(async (req, res) => {
+    const organization = await removeOrganizationLogo(req, req.params.id);
+    return res.status(200).json(new ApiResponse(200, organization, "Organization logo removed successfully."));
+});
 
 export {
+    createOrganization,
+    deleteLogo,
+    downloadLogo,
+    getOrganizationDetail,
     listOrganization,
-    creatOrganization,
-    updateOrganization,
     toggleStatus,
-    getOrganizationDetail
-    // searchCompany,
-    // allCompany
-}
+    updateOrganization,
+    uploadLogo,
+};

@@ -50,7 +50,7 @@ enum CostType {
   SHIPPING
   REPLACEMENT
   CREDIT_NOTE
-  TAX
+  REPAIR
 }
 
 enum AuditAction {
@@ -69,6 +69,16 @@ enum SenderType {
   SYSTEM
 }
 
+enum NotificationRecipientType {
+  USER
+  CUSTOMER
+}
+
+enum NotificationReferenceType {
+  CHAT
+  REPAIR_JOB
+}
+
 enum DocumentType {
   IMAGE
   PDF
@@ -77,18 +87,113 @@ enum DocumentType {
   OTHER
 }
 
+enum JobPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum WorkLogType {
+  INSPECTION
+  DIAGNOSIS
+  REPAIR
+  TEST
+  QA
+}
+
+enum EstimateStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  RECEIVE
+  RESERVE
+  RELEASE
+  CONSUME
+  ADJUST
+  RETURN
+}
+
+enum ShipmentDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum ShipmentStatus {
+  PENDING
+  LABEL_CREATED
+  IN_TRANSIT
+  DELIVERED
+  EXCEPTION
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+enum RmaRequestStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum PrivacyRequestType {
+  EXPORT
+  ERASURE
+}
+
+enum PrivacyRequestStatus {
+  REQUESTED
+  REVIEWING
+  COMPLETED
+  REJECTED
+}
+
 // ─── Organization ────────────────────────────────────────────────────────────
 
 model Organization {
-  id          Int      @id @default(autoincrement())
-  name        String
-  alias       String
-  address     String?
-  email       String?
-  phone       String?
-  isActive    Boolean  @default(false)
-  createdDate DateTime @default(now())
-  updatedDate DateTime @updatedAt
+  id            Int       @id @default(autoincrement())
+  name          String
+  alias         String
+  address       String?
+  email         String?
+  phone         String?
+  isActive      Boolean   @default(false)
+  logoFileName  String?
+  logoMimeType  String?
+  logoFileSize  Int?
+  logoFileHash  String?
+  logoUpdatedAt DateTime?
+  createdDate   DateTime  @default(now())
+  updatedDate   DateTime  @updatedAt
 
   // Back-relations (required by Prisma)
   userOrganizations UserOrganization[]
@@ -97,8 +202,18 @@ model Organization {
   products          Product[]
   productSerials    ProductSerial[]
   notifications     Notification[]
-  
-  @@unique([email,name])
+  settings          OrganizationSetting?
+  suppliers         Supplier[]
+  inventoryItems    InventoryItem[]
+  invoices          Invoice[]
+  apiKeys           ApiKey[]
+  webhookEndpoints  WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
+  outboxEvents      OutboxEvent[]
+  rmaRequests       RmaRequest[]
+  privacyRequests   PrivacyRequest[]
+
+  @@unique([email, name])
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -114,11 +229,17 @@ model User {
   isActive             Boolean   @default(false)
   isLocked             Boolean   @default(false)
   activationToken      String?
+  activationTokenExpires DateTime?
   lastLoginAt          DateTime?
   passwordResetToken   String?
   passwordResetExpires DateTime?
   createdDate          DateTime  @default(now())
   updatedDate          DateTime  @updatedAt
+  failedLoginAttempts  Int       @default(0)
+  lockedAt             DateTime?
+  mfaEnabled           Boolean   @default(false)
+  mfaSecretCiphertext  String?
+  mfaRecoveryCodeHashes String[] @default([])
 
   // Back-relations (required by Prisma)
   userOrganizations UserOrganization[]
@@ -130,6 +251,8 @@ model User {
   comments          RepairJobComment[]
   auditLogs         RepairJobAuditLog[]
   sessions          SessionManagement[]
+  assignedJobs      RepairJob[]         @relation("JobAssignedTo")
+  workLogs          RepairJobWorkLog[]
 }
 
 // ─── UserOrganization ────────────────────────────────────────────────────────
@@ -171,7 +294,7 @@ model Customer {
   email                String
   password             String
   contactPersonName    String? // Fixed: was contactPerson_name (mixed case)
-  contactPersonEmail    String?
+  contactPersonEmail   String?
   mobile               String?
   role                 String       @default("CUSTOMER")
   returnAddress        String?
@@ -187,15 +310,24 @@ model Customer {
   creditLimit          Decimal?     @db.Decimal(12, 2)
   paymentTerms         Int?         @default(0)
   activationToken      String?
+  activationTokenExpires DateTime?
   lastLoginAt          DateTime?
   passwordResetToken   String?
   passwordResetExpires DateTime?
   createdDate          DateTime     @default(now())
   updatedDate          DateTime     @updatedAt
+  failedLoginAttempts  Int          @default(0)
+  lockedAt             DateTime?
+  mfaEnabled           Boolean      @default(false)
+  mfaSecretCiphertext  String?
+  mfaRecoveryCodeHashes String[]    @default([])
 
   // Back-relations (required by Prisma)
   userCustomers UserCustomer[]
   repairJobs    RepairJob[]
+  sessions      CustomerSession[]
+  rmaRequests   RmaRequest[]
+  privacyRequests PrivacyRequest[]
 
   @@unique([organizationId, customerCode])
   @@unique([organizationId, email])
@@ -228,6 +360,8 @@ model RepairJob {
   customerJobNo          String?
   resolutionType         Resolution?
   jobStatus              JobStatus    @default(CREATED)
+  priority               JobPriority  @default(NORMAL)
+  intakeSource           String       @default("INTERNAL")
   // Both FKs to User must have named relations — avoids Prisma ambiguity error
   createdBy              Int
   createdByUser          User         @relation("JobCreatedBy", fields: [createdBy], references: [id])
@@ -236,7 +370,13 @@ model RepairJob {
   receivedByUser         User?        @relation("JobReceivedBy", fields: [receivedBy], references: [id])
   receivedRoleBy         String?
   receivedDate           DateTime?
+  assignedTo             Int?
+  assignedToUser         User?        @relation("JobAssignedTo", fields: [assignedTo], references: [id])
+  assignedDate           DateTime?
   dueDate                DateTime?
+  slaDueAt               DateTime?
+  slaPausedAt            DateTime?
+  slaBreachedAt          DateTime?
   completionDate         DateTime?
   createdDate            DateTime     @default(now())
   updatedDate            DateTime     @updatedAt
@@ -248,12 +388,19 @@ model RepairJob {
   chats     Chat[]
   auditLogs RepairJobAuditLog[]
   documents Document[]
+  workLogs  RepairJobWorkLog[]
+  estimates RepairEstimate[]
+  shipments Shipment[]
+  invoices  Invoice[]
   //notifications Notification[]
 
   @@index([sku])
   @@index([productName])
   @@index([organizationId]) // Added: high-traffic tenant-scoped FK
   @@index([customerId]) // Added: high-traffic FK
+  @@index([assignedTo, jobStatus])
+  @@index([organizationId, jobStatus, priority])
+  @@index([slaDueAt, jobStatus])
 }
 
 // ─── RepairJobTracking ───────────────────────────────────────────────────────
@@ -412,21 +559,21 @@ model Document {
 // ─── Notification ────────────────────────────────────────────────────────────
 
 model Notification {
-  id             Int          @id @default(autoincrement())
+  id             Int                       @id @default(autoincrement())
   organizationId Int
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  recipientType  String
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recipientType  NotificationRecipientType
   recipientId    Int
-  referenceType  String
+  referenceType  NotificationReferenceType
   referenceId    Int
   title          String
   message        String
-  isRead         Boolean      @default(false)
-  createdDate    DateTime     @default(now())
+  isRead         Boolean                   @default(false)
+  createdDate    DateTime                  @default(now())
 
-  // Composite index supports: "unread notifications for recipient X"
   @@index([recipientType, recipientId, isRead])
-  @@index([referenceType, referenceId]) // Added: look up notifications by source entity
+  @@index([organizationId, createdDate])
+  @@index([referenceType, referenceId])
 }
 
 // ─── SystemLog ───────────────────────────────────────────────────────────────
@@ -443,13 +590,413 @@ model SystemLog {
 // ─── SessionManagement ───────────────────────────────────────────────────────
 
 model SessionManagement {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   userId       Int
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   ipAddress    String?
-  refreshToken String
+  refreshToken     String?
+  refreshTokenHash String?   @unique
+  userAgent        String?
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
   expiresAt    DateTime? // Fixed: was expires_at (snake_case)
-  createdDate  DateTime @default(now())
+  createdDate  DateTime  @default(now())
 
   @@index([userId]) // Added: session lookup by user on every auth request
+  @@index([userId, revokedAt, expiresAt])
+}
+
+// ─── Production workflow and platform models ────────────────────────────────
+
+model OrganizationSetting {
+  id                    Int          @id @default(autoincrement())
+  organizationId        Int          @unique
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  timezone              String       @default("Pacific/Auckland")
+  currency              String       @default("NZD")
+  taxRate               Decimal      @default(0.15) @db.Decimal(7, 6)
+  defaultSlaHours       Int          @default(120)
+  nextInvoiceNumber     Int          @default(1)
+  nextRmaNumber         Int          @default(1)
+  businessHours         Json?
+  workflowConfiguration Json?
+  branding              Json?
+  createdDate           DateTime     @default(now())
+  updatedDate           DateTime     @updatedAt
+}
+
+model RepairJobWorkLog {
+  id          Int         @id @default(autoincrement())
+  repairJobId Int
+  repairJob   RepairJob   @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  type        WorkLogType
+  summary     String
+  details     Json?
+  durationMin Int?
+  passed      Boolean?
+  performedBy Int
+  user        User        @relation(fields: [performedBy], references: [id])
+  createdDate DateTime    @default(now())
+
+  @@index([repairJobId, type, createdDate])
+}
+
+model RepairEstimate {
+  id             Int            @id @default(autoincrement())
+  repairJobId    Int
+  repairJob      RepairJob      @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  version        Int            @default(1)
+  status         EstimateStatus @default(DRAFT)
+  currency       String         @default("NZD")
+  subtotal       Decimal        @db.Decimal(12, 2)
+  tax            Decimal        @db.Decimal(12, 2)
+  total          Decimal        @db.Decimal(12, 2)
+  expiresAt      DateTime?
+  customerNote   String?
+  decisionAt     DateTime?
+  createdBy      Int
+  createdDate    DateTime       @default(now())
+  updatedDate    DateTime       @updatedAt
+  lines          RepairEstimateLine[]
+
+  @@unique([repairJobId, version])
+  @@index([repairJobId, status])
+}
+
+model RepairEstimateLine {
+  id          Int            @id @default(autoincrement())
+  estimateId  Int
+  estimate    RepairEstimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int            @default(1)
+  unitPrice   Decimal        @db.Decimal(12, 2)
+  total       Decimal        @db.Decimal(12, 2)
+}
+
+model Supplier {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String?
+  phone          String?
+  isActive       Boolean      @default(true)
+  createdDate    DateTime     @default(now())
+  updatedDate    DateTime     @updatedAt
+  inventoryItems InventoryItem[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+}
+
+model InventoryItem {
+  id               Int          @id @default(autoincrement())
+  organizationId   Int
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId       Int?
+  supplier         Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  sku              String
+  name             String
+  quantityOnHand   Int          @default(0)
+  quantityReserved Int          @default(0)
+  reorderPoint     Int          @default(0)
+  unitCost         Decimal      @default(0) @db.Decimal(12, 2)
+  isActive         Boolean      @default(true)
+  createdDate      DateTime     @default(now())
+  updatedDate      DateTime     @updatedAt
+  movements        InventoryMovement[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId, isActive])
+}
+
+model InventoryMovement {
+  id              Int                   @id @default(autoincrement())
+  inventoryItemId Int
+  inventoryItem   InventoryItem         @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  repairJobId     Int?
+  type            InventoryMovementType
+  quantity        Int
+  reason          String
+  performedBy     Int
+  createdDate     DateTime              @default(now())
+
+  @@index([inventoryItemId, createdDate])
+  @@index([repairJobId])
+}
+
+model Shipment {
+  id             Int               @id @default(autoincrement())
+  repairJobId    Int
+  repairJob      RepairJob         @relation(fields: [repairJobId], references: [id], onDelete: Cascade)
+  direction      ShipmentDirection
+  status         ShipmentStatus    @default(PENDING)
+  carrier        String
+  service        String?
+  trackingNumber String?
+  labelUrl       String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  createdBy      Int
+  createdDate    DateTime          @default(now())
+  updatedDate    DateTime          @updatedAt
+  events         ShipmentEvent[]
+
+  @@index([repairJobId, direction])
+  @@index([trackingNumber])
+}
+
+model ShipmentEvent {
+  id          Int            @id @default(autoincrement())
+  shipmentId  Int
+  shipment    Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status      ShipmentStatus
+  description String?
+  location    String?
+  occurredAt  DateTime
+  createdDate DateTime       @default(now())
+
+  @@index([shipmentId, occurredAt])
+}
+
+model Invoice {
+  id             Int           @id @default(autoincrement())
+  organizationId Int
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  repairJobId    Int
+  repairJob      RepairJob     @relation(fields: [repairJobId], references: [id])
+  invoiceNumber  String
+  status         InvoiceStatus @default(DRAFT)
+  currency       String        @default("NZD")
+  subtotal       Decimal       @db.Decimal(12, 2)
+  tax            Decimal       @db.Decimal(12, 2)
+  total          Decimal       @db.Decimal(12, 2)
+  amountPaid     Decimal       @default(0) @db.Decimal(12, 2)
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  voidedAt       DateTime?
+  createdBy      Int
+  createdDate    DateTime      @default(now())
+  updatedDate    DateTime      @updatedAt
+  lines          InvoiceLine[]
+  payments       Payment[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([repairJobId, status])
+  @@index([organizationId, status, dueAt])
+}
+
+model InvoiceLine {
+  id          Int      @id @default(autoincrement())
+  invoiceId   Int
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+}
+
+model Payment {
+  id          Int           @id @default(autoincrement())
+  invoiceId   Int
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  status      PaymentStatus @default(PENDING)
+  amount      Decimal       @db.Decimal(12, 2)
+  method      String
+  externalRef String?
+  paidAt      DateTime?
+  createdBy   Int
+  createdDate DateTime      @default(now())
+
+  @@index([invoiceId, status])
+  @@unique([invoiceId, externalRef])
+}
+
+model CustomerSession {
+  id               Int       @id @default(autoincrement())
+  customerId       Int
+  customer         Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  createdDate      DateTime  @default(now())
+
+  @@index([customerId, revokedAt, expiresAt])
+}
+
+model NotificationPreference {
+  id            Int                       @id @default(autoincrement())
+  recipientType NotificationRecipientType
+  recipientId   Int
+  emailEnabled  Boolean                   @default(true)
+  inAppEnabled  Boolean                   @default(true)
+  digestEnabled Boolean                   @default(false)
+  mutedEvents   String[]                  @default([])
+  updatedDate   DateTime                  @updatedAt
+
+  @@unique([recipientType, recipientId])
+}
+
+model ApiKey {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  keyPrefix      String
+  keyHash        String       @unique
+  scopes         String[]     @default([])
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  lastUsedAt     DateTime?
+  createdBy      Int
+  createdDate    DateTime     @default(now())
+
+  @@index([organizationId, revokedAt])
+}
+
+model WebhookEndpoint {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  url            String
+  secretCiphertext String
+  events         String[]     @default([])
+  isActive       Boolean      @default(true)
+  failureCount   Int          @default(0)
+  lastSuccessAt  DateTime?
+  createdBy      Int
+  createdDate    DateTime     @default(now())
+  updatedDate    DateTime     @updatedAt
+  deliveries     WebhookDelivery[]
+
+  @@index([organizationId, isActive])
+}
+
+model OutboxEvent {
+  id             BigInt        @id @default(autoincrement())
+  organizationId Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  eventType      String
+  aggregateType  String
+  aggregateId    String
+  payload        Json
+  status         OutboxStatus  @default(PENDING)
+  attempts       Int           @default(0)
+  availableAt    DateTime      @default(now())
+  lockedAt       DateTime?
+  processedAt    DateTime?
+  lastError      String?
+  createdDate    DateTime      @default(now())
+  deliveries     WebhookDelivery[]
+
+  @@index([status, availableAt])
+  @@index([organizationId, createdDate])
+}
+
+model WebhookDelivery {
+  id                BigInt          @id @default(autoincrement())
+  organizationId    Int
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  outboxEventId     BigInt
+  outboxEvent       OutboxEvent     @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+  webhookEndpointId Int
+  webhookEndpoint   WebhookEndpoint @relation(fields: [webhookEndpointId], references: [id], onDelete: Cascade)
+  status            OutboxStatus    @default(PENDING)
+  attempts          Int             @default(0)
+  availableAt       DateTime        @default(now())
+  lockedAt          DateTime?
+  processedAt       DateTime?
+  responseStatus    Int?
+  lastError         String?
+  createdDate       DateTime        @default(now())
+
+  @@unique([outboxEventId, webhookEndpointId])
+  @@index([status, availableAt])
+  @@index([organizationId, createdDate])
+}
+
+model IdempotencyRecord {
+  id             BigInt   @id @default(autoincrement())
+  actorKey       String
+  idempotencyKey String
+  requestHash    String
+  statusCode     Int?
+  responseBody   Json?
+  expiresAt      DateTime
+  createdDate    DateTime @default(now())
+
+  @@unique([actorKey, idempotencyKey])
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+model RmaRequest {
+  id                     Int              @id @default(autoincrement())
+  organizationId         Int
+  organization           Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId             Int
+  customer               Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status                 RmaRequestStatus @default(SUBMITTED)
+  sku                    String
+  productName            String
+  serialNumber           String
+  productFault           String
+  salesInvoice           String?
+  customerTrackingNumber String?
+  requestedResolution    Resolution?
+  reviewNote             String?
+  reviewedBy             Int?
+  reviewedAt             DateTime?
+  repairJobId            Int?             @unique
+  createdDate            DateTime         @default(now())
+  updatedDate            DateTime         @updatedAt
+  documents              RmaRequestDocument[]
+
+  @@index([organizationId, status, createdDate])
+  @@index([customerId, status])
+}
+
+model RmaRequestDocument {
+  id           Int        @id @default(autoincrement())
+  rmaRequestId Int
+  rmaRequest   RmaRequest @relation(fields: [rmaRequestId], references: [id], onDelete: Cascade)
+  documentName String
+  documentUrl  String
+  documentType DocumentType
+  fileHash     String
+  uploadedDate DateTime   @default(now())
+
+  @@index([rmaRequestId])
+}
+
+model PrivacyRequest {
+  id              Int                  @id @default(autoincrement())
+  organizationId  Int
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId      Int
+  customer        Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type            PrivacyRequestType
+  status          PrivacyRequestStatus @default(REQUESTED)
+  requestedByType String
+  requestedById   Int
+  reason          String?
+  resolutionNote  String?
+  resolvedBy      Int?
+  resolvedAt      DateTime?
+  createdDate     DateTime             @default(now())
+  updatedDate     DateTime             @updatedAt
+
+  @@index([organizationId, status, createdDate])
+  @@index([customerId, createdDate])
 }

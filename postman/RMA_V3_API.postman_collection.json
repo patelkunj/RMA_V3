@@ -1,10 +1,11 @@
 {
   "info": {
     "name": "RMA V3 API",
-    "description": "Postman collection for the RMA V3 Express API. Import this file into Postman, run User Login first, then run protected requests.",
+    "description": "Postman collection for the canonical RMA V3 production API. Start with Login User for administrative requests. Login Customer replaces the cookie session for customer-only requests; run Login User again to switch back. Scripts retain CSRF/auth tokens when exposed, generate idempotency keys, and save created resource IDs. Deprecated examples are isolated in the Legacy Compatibility folder; see docs/api-migration.md before using them.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
+<<<<<<< HEAD
     { "key": "baseUrl", "value": "http://localhost:3000" },
     { "key": "accessToken", "value": "" },
     { "key": "refreshToken", "value": "" },
@@ -22,11 +23,236 @@
     { "key": "commentId", "value": "9901" },
     { "key": "activationToken", "value": "replace-with-token" },
     { "key": "resetToken", "value": "replace-with-token" }
+=======
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "customerAccessToken",
+      "value": ""
+    },
+    {
+      "key": "organizationId",
+      "value": "9001"
+    },
+    {
+      "key": "organizationId2",
+      "value": "9002"
+    },
+    {
+      "key": "userId",
+      "value": "9002"
+    },
+    {
+      "key": "technicianId",
+      "value": "9003"
+    },
+    {
+      "key": "customerId",
+      "value": "9401"
+    },
+    {
+      "key": "customerId2",
+      "value": "9402"
+    },
+    {
+      "key": "productId",
+      "value": "9201"
+    },
+    {
+      "key": "serialNumberId",
+      "value": "9301"
+    },
+    {
+      "key": "repairJobId",
+      "value": "9102"
+    },
+    {
+      "key": "repairJobCostId",
+      "value": "9803"
+    },
+    {
+      "key": "commentId",
+      "value": "9901"
+    },
+    {
+      "key": "notificationId",
+      "value": "0"
+    },
+    {
+      "key": "documentId",
+      "value": "0"
+    },
+    {
+      "key": "sessionId",
+      "value": "0"
+    },
+    {
+      "key": "activationToken",
+      "value": "replace-with-token"
+    },
+    {
+      "key": "resetToken",
+      "value": "replace-with-token"
+    },
+    {
+      "key": "customerRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    },
+    {
+      "key": "currentUserId",
+      "value": "0"
+    },
+    {
+      "key": "currentCustomerId",
+      "value": "0"
+    },
+    {
+      "key": "mfaCode",
+      "value": ""
+    },
+    {
+      "key": "mfaSecret",
+      "value": ""
+    },
+    {
+      "key": "rmaRequestId",
+      "value": "0"
+    },
+    {
+      "key": "estimateId",
+      "value": "0"
+    },
+    {
+      "key": "nextRepairStatus",
+      "value": "RECEIVED"
+    },
+    {
+      "key": "inventoryItemId",
+      "value": "0"
+    },
+    {
+      "key": "inventoryMovementId",
+      "value": "0"
+    },
+    {
+      "key": "shipmentId",
+      "value": "0"
+    },
+    {
+      "key": "invoiceId",
+      "value": "0"
+    },
+    {
+      "key": "paymentId",
+      "value": "0"
+    },
+    {
+      "key": "apiKey",
+      "value": ""
+    },
+    {
+      "key": "apiKeyId",
+      "value": "0"
+    },
+    {
+      "key": "webhookId",
+      "value": "0"
+    },
+    {
+      "key": "webhookSecret",
+      "value": ""
+    },
+    {
+      "key": "webhookUrl",
+      "value": "https://webhook.example.com/rma-events"
+    },
+    {
+      "key": "privacyRequestId",
+      "value": "0"
+    },
+    {
+      "key": "metricsToken",
+      "value": "replace-with-metrics-token"
+    },
+    {
+      "key": "deviceCredentialReason",
+      "value": "Diagnosing the assigned repair"
+    },
+    {
+      "key": "organizationLogoPath",
+      "value": "/absolute/path/to/organization-logo.png"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const unsafe = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(pm.request.method);",
+          "if (unsafe && !pm.request.headers.has('Idempotency-Key')) {",
+          "  pm.request.headers.upsert({ key: 'Idempotency-Key', value: pm.variables.replaceIn('{{$guid}}') });",
+          "}",
+          "const csrfToken = pm.collectionVariables.get('csrfToken');",
+          "if (unsafe && csrfToken) {",
+          "  pm.request.headers.upsert({ key: 'X-CSRF-Token', value: csrfToken });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const responseContentType = (pm.response.headers.get('Content-Type') || '').toLowerCase();",
+          "const responsePath = pm.request.url.getPath();",
+          "const envelopeExempt = responsePath.startsWith('/health/') || responsePath === '/api-docs/openapi.json';",
+          "if (responseContentType.includes('application/json') && !envelopeExempt) {",
+          "  let responseBody;",
+          "  pm.test('Response contains valid JSON', function () {",
+          "    pm.expect(function () { responseBody = pm.response.json(); }).not.to.throw();",
+          "  });",
+          "  if (responseBody) {",
+          "    pm.test('JSON uses the standard API envelope', function () {",
+          "      pm.expect(responseBody).to.have.all.keys('statusCode', 'success', 'message', 'data', ...(responseBody.success === false ? ['errors'] : []));",
+          "      pm.expect(responseBody.statusCode).to.eql(pm.response.code);",
+          "      pm.expect(responseBody.success).to.be.a('boolean');",
+          "      pm.expect(responseBody.message).to.be.a('string');",
+          "      if (responseBody.success === false) {",
+          "        pm.expect(responseBody.data).to.eql(null);",
+          "        pm.expect(responseBody.errors).to.be.an('array');",
+          "      }",
+          "    });",
+          "  }",
+          "}"
+        ]
+      }
+    }
+>>>>>>> refactor-services-prisma-structure
   ],
   "auth": {
     "type": "bearer",
     "bearer": [
-      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
     ]
   },
   "item": [
@@ -41,39 +267,96 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const json = pm.response.json();",
-                  "if (json?.data?.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
-                  "if (json?.data?.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "const data = json?.data;",
+                  "if (data?.csrfToken) pm.collectionVariables.set('csrfToken', data.csrfToken);",
+                  "if (data?.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "if (data?.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "if (data?.user?.id) pm.collectionVariables.set('currentUserId', data.user.id);"
                 ]
               }
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/api/v1/users/login",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"seed.superadmin@example.test\",\n  \"password\": \"Password123!\"\n}"
+              "raw": "{\n  \"email\": \"seed.superadmin@example.test\",\n  \"password\": \"Password123!\",\n  \"mfaCode\": \"{{mfaCode}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Session Token for User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "const data = json?.data;",
+                  "if (data?.csrfToken) pm.collectionVariables.set('csrfToken', data.csrfToken);",
+                  "if (data?.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "if (data?.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "if (data?.user?.id) pm.collectionVariables.set('currentUserId', data.user.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/sessions/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
             }
           }
         },
         {
           "name": "Activate User",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/users/activeuser/{{activationToken}}"
+            "url": "{{baseUrl}}/api/v1/users/activate/{{activationToken}}"
           }
         },
         {
           "name": "Request User Password Reset",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users/getUserDetail",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/password-reset/request",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"seed.admin@example.test\"\n}"
@@ -83,10 +366,17 @@
         {
           "name": "Reset User Password",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users/forgetPassword/{{resetToken}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/password-reset/{{resetToken}}",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"newPassword\": \"Password123!\"\n}"
@@ -95,14 +385,22 @@
         },
         {
           "name": "Logout User",
-          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/users/logout" }
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/users/logout"
+          }
         },
         {
           "name": "Change User Password",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users/change_password",
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"oldPassword\": \"Password123!\",\n  \"newPassword\": \"Password123!\"\n}"
@@ -113,50 +411,145 @@
           "name": "Register User",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users/register",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Alex\",\n  \"last_name\": \"Tester\",\n  \"email\": \"alex.tester@example.test\",\n  \"mobile\": \"+64 21 555 7777\",\n  \"role\": \"TECHNICIAN\",\n  \"assignedCustomer\": [{{customerId}}],\n  \"assignedOrg\": [{{organizationId}}]\n}"
+              "raw": "{\n  \"firstName\": \"Alex\",\n  \"lastName\": \"Tester\",\n  \"email\": \"alex.tester@example.test\",\n  \"mobile\": \"+64 21 555 7777\",\n  \"role\": \"TECHNICIAN\",\n  \"assignedCustomerIds\": [{{customerId}}],\n  \"assignedOrganizationIds\": [{{organizationId}}]\n}"
             }
           }
         },
         {
           "name": "List Users",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/users" }
-        },
-        {
-          "name": "List Users Legacy",
-          "request": { "method": "POST", "url": "{{baseUrl}}/api/v1/users/list_user" }
-        },
-        {
-          "name": "Find User",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users/find",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{userId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users"
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}"
           }
         },
         {
           "name": "Update User",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{userId}},\n  \"first_name\": \"Anika\",\n  \"last_name\": \"Admin\",\n  \"email\": \"seed.admin@example.test\",\n  \"mobile\": \"+64 21 555 9002\",\n  \"role\": \"ADMIN\",\n  \"assignedCustomer\": [{{customerId}}, {{customerId2}}],\n  \"assignedOrg\": [{{organizationId}}],\n  \"is_active\": true\n}"
+              "raw": "{\n  \"firstName\": \"Anika\",\n  \"lastName\": \"Admin\",\n  \"email\": \"seed.admin@example.test\",\n  \"mobile\": \"+64 21 555 9002\",\n  \"role\": \"ADMIN\",\n  \"assignedCustomerIds\": [{{customerId}}, {{customerId2}}],\n  \"assignedOrganizationIds\": [{{organizationId}}],\n  \"isActive\": true\n}"
             }
           }
         },
         {
-          "name": "Toggle User Status",
+          "name": "Update User Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/users/status",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{userId}},\n  \"isActive\": true\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "item": [
+        {
+          "name": "Refresh Session Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "const data = json?.data;",
+                  "if (data?.csrfToken) pm.collectionVariables.set('csrfToken', data.csrfToken);",
+                  "if (data?.user?.role === 'CUSTOMER') {",
+                  "  if (data?.accessToken) pm.collectionVariables.set('customerAccessToken', data.accessToken);",
+                  "  if (data?.refreshToken) pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "} else {",
+                  "  if (data?.accessToken) pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "  if (data?.refreshToken) pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/sessions/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const first = Array.isArray(json?.data) ? json.data[0] : null;",
+                  "if (first?.id) pm.collectionVariables.set('sessionId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/sessions"
+          }
+        },
+        {
+          "name": "Revoke Session",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "Revoke All Sessions",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/sessions/all"
           }
         }
       ]
@@ -172,55 +565,100 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const json = pm.response.json();",
-                  "if (json?.data?.accessToken) pm.collectionVariables.set('customerAccessToken', json.data.accessToken);"
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "const data = json?.data;",
+                  "if (data?.csrfToken) pm.collectionVariables.set('csrfToken', data.csrfToken);",
+                  "if (data?.accessToken) pm.collectionVariables.set('customerAccessToken', data.accessToken);",
+                  "if (data?.refreshToken) pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "if (data?.user?.id) pm.collectionVariables.set('currentCustomerId', data.user.id);"
                 ]
               }
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/api/v1/customers/login",
+            "description": "organizationId is required because customer email addresses are tenant-scoped rather than globally unique.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"seed.northcity@example.test\",\n  \"password\": \"Password123!\"\n}"
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"email\": \"seed.northcity@example.test\",\n  \"password\": \"Password123!\",\n  \"mfaCode\": \"{{mfaCode}}\"\n}"
             }
           }
         },
         {
           "name": "Activate Customer",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/customers/activecustomer/{{activationToken}}"
+            "url": "{{baseUrl}}/api/v1/customers/activate/{{activationToken}}"
           }
         },
         {
           "name": "Request Customer Password Reset",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/getCustomerDetail",
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"seed.northcity@example.test\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers/password-reset/request",
+            "description": "Requires organizationId and email. The response remains generic whether or not the tenant account exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"email\": \"seed.northcity@example.test\"\n}"
+            }
           }
         },
         {
           "name": "Reset Customer Password",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/forgetPassword/{{resetToken}}",
-            "body": { "mode": "raw", "raw": "{\n  \"newPassword\": \"Password123!\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers/password-reset/{{resetToken}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"Password123!\"\n}"
+            }
           }
         },
         {
           "name": "Logout Customer",
           "request": {
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerAccessToken}}", "type": "string" }] },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/customers/logout"
           }
@@ -228,28 +666,48 @@
         {
           "name": "Change Customer Password",
           "request": {
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{customerAccessToken}}", "type": "string" }] },
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/change_password",
-            "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"Password123!\",\n  \"newPassword\": \"Password123!\"\n}" }
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"Password123!\",\n  \"newPassword\": \"Password123!\"\n}"
+            }
           }
         },
         {
-          "name": "Customer Info By Email",
+          "name": "Get Customer By Email",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/customerinfo",
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"seed.northcity@example.test\"\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/customers/by-email?email=seed.northcity%40example.test"
           }
         },
         {
           "name": "Register Customer",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/register",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"companyName\": \"Postman Customer Ltd\",\n  \"email\": \"postman.customer@example.test\",\n  \"contactPersonName\": \"Casey Test\",\n  \"contactPersonEmail\": \"casey.test@example.test\",\n  \"mobile\": \"+64 21 555 7070\",\n  \"returnAddress\": \"1 Test Street, Auckland\",\n  \"warrantyMonths\": 24,\n  \"warrantyType\": \"STANDARD\",\n  \"doaWarrantyDays\": 14,\n  \"doaWarrantyType\": \"DOA_REPLACEMENT\",\n  \"warrantyRemarks\": \"Postman-created customer.\",\n  \"isPickupFaulty\": false,\n  \"salesPerson\": \"Anika Admin\"\n}"
@@ -258,45 +716,57 @@
         },
         {
           "name": "List Customers",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/customers?page=1&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/customers?page=1&limit=20"
+          }
         },
         {
           "name": "Search Customers",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/search",
-            "body": { "mode": "raw", "raw": "{\n  \"searchTerm\": \"North\"\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/customers/search?searchTerm=North"
           }
         },
         {
-          "name": "Find Customer",
+          "name": "Get Customer",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/find",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{customerId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/customers/{{customerId}}"
           }
         },
         {
           "name": "Update Customer",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers/{{customerId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{customerId}},\n  \"companyName\": \"North City Electronics\",\n  \"email\": \"seed.northcity@example.test\",\n  \"contactPersonName\": \"Priya Shah\",\n  \"contactPersonEmail\": \"priya.seed@example.test\",\n  \"mobile\": \"+64 27 555 1001\",\n  \"returnAddress\": \"44 Retail Park, Auckland 0627\",\n  \"warrantyMonths\": \"24\",\n  \"warrantyType\": \"STANDARD\",\n  \"doaArrantyDays\": \"14\",\n  \"doaWarrantyType\": \"DOA_REPLACEMENT\",\n  \"warrantyRemarks\": \"Updated from Postman.\",\n  \"salesPerson\": \"Anika Admin\",\n  \"isPickupFaulty\": true\n}"
+              "raw": "{\n  \"companyName\": \"North City Electronics\",\n  \"email\": \"seed.northcity@example.test\",\n  \"contactPersonName\": \"Priya Shah\",\n  \"contactPersonEmail\": \"priya.seed@example.test\",\n  \"mobile\": \"+64 27 555 1001\",\n  \"returnAddress\": \"44 Retail Park, Auckland 0627\",\n  \"warrantyMonths\": 24,\n  \"warrantyType\": \"STANDARD\",\n  \"doaWarrantyDays\": 14,\n  \"doaWarrantyType\": \"DOA_REPLACEMENT\",\n  \"warrantyRemarks\": \"Updated from Postman.\",\n  \"salesPerson\": \"Anika Admin\",\n  \"isPickupFaulty\": true\n}"
             }
           }
         },
         {
-          "name": "Toggle Customer Status",
+          "name": "Update Customer Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/customers/status",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{customerId}},\n  \"isActive\": true\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers/{{customerId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            }
           }
         }
       ]
@@ -306,17 +776,28 @@
       "item": [
         {
           "name": "List Organizations",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/organizations?page=1&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/organizations?page=1&limit=20"
+          }
         },
         {
           "name": "Get Organization",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}"
+          }
         },
         {
           "name": "Create Organization",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/api/v1/organizations",
             "body": {
               "mode": "raw",
@@ -328,21 +809,68 @@
           "name": "Update Organization",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/organizations",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{organizationId}},\n  \"name\": \"Acme Reverse Logistics NZ\",\n  \"alias\": \"ACM\",\n  \"address\": \"12 Logistics Way, Auckland 2013\",\n  \"email\": \"ops.seed.acme@example.test\",\n  \"phone\": \"+64 9 555 0101\",\n  \"isActive\": true\n}"
+              "raw": "{\n  \"name\": \"Acme Reverse Logistics NZ\",\n  \"alias\": \"ACM\",\n  \"address\": \"12 Logistics Way, Auckland 2013\",\n  \"email\": \"ops.seed.acme@example.test\",\n  \"phone\": \"+64 9 555 0101\",\n  \"isActive\": true\n}"
             }
           }
         },
         {
-          "name": "Toggle Organization Status",
+          "name": "Update Organization Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/organizations/status",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{organizationId}},\n  \"isActive\": true\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Upload Organization Logo",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}/logo",
+            "description": "Admin/Super Admin. Upload one PNG or JPEG image up to 2 MB using the logo form field.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": "{{organizationLogoPath}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download Organization Logo",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}/logo",
+            "description": "Authenticated, tenant-scoped logo download. Use Send and Download to save the image."
+          }
+        },
+        {
+          "name": "Remove Organization Logo",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/organizations/{{organizationId}}/logo",
+            "description": "Admin/Super Admin. Removes the configured logo; PDFs return to text branding."
           }
         }
       ]
@@ -352,17 +880,25 @@
       "item": [
         {
           "name": "List Products",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/products?page=1&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/products?page=1&limit=20"
+          }
         },
         {
           "name": "Create Product",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/api/v1/products",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"sku\": \"PM-SKU-001\",\n  \"product_name\": \"Postman Test Product\",\n  \"model\": \"PM-1\",\n  \"color\": \"Black\"\n}"
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"sku\": \"PM-SKU-001\",\n  \"productName\": \"Postman Test Product\",\n  \"model\": \"PM-1\",\n  \"color\": \"Black\"\n}"
             }
           }
         },
@@ -370,21 +906,24 @@
           "name": "Update Product",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/products",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{productId}},\n  \"organizationId\": {{organizationId}},\n  \"sku\": \"CAM-4K-PRO\",\n  \"product_name\": \"4K Action Camera Pro\",\n  \"model\": \"ACP-400\",\n  \"color\": \"Black\"\n}"
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"sku\": \"CAM-4K-PRO\",\n  \"productName\": \"4K Action Camera Pro\",\n  \"model\": \"ACP-400\",\n  \"color\": \"Black\"\n}"
             }
           }
         },
         {
           "name": "Search Products",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/products/search",
-            "body": { "mode": "raw", "raw": "{\n  \"keyword\": \"CAM\"\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/products/search?keyword=CAM"
           }
         }
       ]
@@ -394,17 +933,25 @@
       "item": [
         {
           "name": "List Serial Numbers",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/serialnumbers?page=1&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/serial-numbers?page=1&limit=20"
+          }
         },
         {
           "name": "Create Serial Number",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/serialnumbers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/serial-numbers",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"organization_id\": {{organizationId}},\n  \"product_id\": {{productId}},\n  \"serial_number\": \"PM-SERIAL-001\",\n  \"sales_order\": \"PM-INV-001\",\n  \"sales_date\": \"2026-01-01\",\n  \"warranty_expriy\": \"2028-01-01\",\n  \"is_replacement\": false\n}"
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"productId\": {{productId}},\n  \"serialNumber\": \"PM-SERIAL-001\",\n  \"salesInvoice\": \"PM-INV-001\",\n  \"saleDate\": \"2026-01-01\",\n  \"warrantyExpiry\": \"2028-01-01\",\n  \"isReplacementProduct\": false\n}"
             }
           }
         },
@@ -412,11 +959,16 @@
           "name": "Update Serial Number",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/serialnumbers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/serial-numbers/{{serialNumberId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{serialId}},\n  \"organization_id\": {{organizationId}},\n  \"product_id\": {{productId}},\n  \"serial_number\": \"SN-CAM4K-0001\",\n  \"sales_order\": \"INV-ACM-10001\",\n  \"sales_date\": \"2026-01-10\",\n  \"warranty_expriy\": \"2028-01-10\",\n  \"is_replacement\": false\n}"
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"productId\": {{productId}},\n  \"serialNumber\": \"SN-CAM4K-0001\",\n  \"salesInvoice\": \"INV-ACM-10001\",\n  \"saleDate\": \"2026-01-10\",\n  \"warrantyExpiry\": \"2028-01-10\",\n  \"isReplacementProduct\": false\n}"
             }
           }
         },
@@ -424,11 +976,15 @@
           "name": "Upload Serial Number Excel",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/serialnumbers/upload",
+            "url": "{{baseUrl}}/api/v1/serial-numbers/upload",
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": "" }
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
               ]
             }
           }
@@ -441,53 +997,126 @@
         {
           "name": "List Repair Jobs",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/list_repairjob",
-            "body": { "mode": "raw", "raw": "{\n  \"field\": \"IN_PROGRESS\",\n  \"page\": 1,\n  \"limit\": 20\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-jobs?status=IN_PROGRESS&page=1&limit=20"
           }
         },
         {
-          "name": "Add Repair Job",
+          "name": "Create Repair Job",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/repairjobs/add_repairjob",
+            "url": "{{baseUrl}}/api/v1/repair-jobs",
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "organization_id", "value": "{{organizationId}}", "type": "text" },
-                { "key": "customer_id", "value": "{{customerId}}", "type": "text" },
-                { "key": "store_code", "value": "ACM01", "type": "text" },
-                { "key": "email", "value": "seed.northcity@example.test", "type": "text" },
-                { "key": "company_job_no", "value": "PM-JOB-001", "type": "text" },
-                { "key": "sales_invoice", "value": "INV-ACM-10001", "type": "text" },
-                { "key": "sku", "value": "CAM-4K-PRO", "type": "text" },
-                { "key": "product_name", "value": "4K Action Camera Pro", "type": "text" },
-                { "key": "serial_number", "value": "PM-RMA-SERIAL-001", "type": "text" },
-                { "key": "device_password", "value": "", "type": "text" },
-                { "key": "is_doa", "value": "false", "type": "text" },
-                { "key": "is_product_under_warranty", "value": "true", "type": "text" },
-                { "key": "cloud_status", "value": "SYNCED", "type": "text" },
-                { "key": "cloud_details", "value": "Cloud account removed.", "type": "text" },
-                { "key": "product_fault", "value": "Postman test fault.", "type": "text" },
-                { "key": "video_url", "value": "", "type": "text" },
-                { "key": "customer_tracking_number", "value": "PM-TRACK-001", "type": "text" },
-                { "key": "attachments", "type": "file", "src": "" }
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "storeCode",
+                  "value": "ACM01",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "seed.northcity@example.test",
+                  "type": "text"
+                },
+                {
+                  "key": "companyJobNo",
+                  "value": "PM-JOB-001",
+                  "type": "text"
+                },
+                {
+                  "key": "salesInvoice",
+                  "value": "INV-ACM-10001",
+                  "type": "text"
+                },
+                {
+                  "key": "sku",
+                  "value": "CAM-4K-PRO",
+                  "type": "text"
+                },
+                {
+                  "key": "productName",
+                  "value": "4K Action Camera Pro",
+                  "type": "text"
+                },
+                {
+                  "key": "serialNumber",
+                  "value": "PM-RMA-SERIAL-001",
+                  "type": "text"
+                },
+                {
+                  "key": "devicePassword",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "isDoa",
+                  "value": "false",
+                  "type": "text"
+                },
+                {
+                  "key": "isProductUnderWarranty",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "cloudStatus",
+                  "value": "SYNCED",
+                  "type": "text"
+                },
+                {
+                  "key": "cloudDetails",
+                  "value": "Cloud account removed.",
+                  "type": "text"
+                },
+                {
+                  "key": "productFault",
+                  "value": "Postman test fault.",
+                  "type": "text"
+                },
+                {
+                  "key": "videoUrl",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "customerTrackingNumber",
+                  "value": "PM-TRACK-001",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": ""
+                }
               ]
             }
           }
         },
         {
-          "name": "Bulk Add Repair Jobs",
+          "name": "Bulk Create Repair Jobs",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/repairjobs/bulk",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/bulk",
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "raJobData", "value": "[]", "type": "text" },
-                { "key": "attachments", "type": "file", "src": "" }
-              ]
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"customerId\": {{customerId}},\n  \"storeCode\": \"ACM01\",\n  \"companyJobNo\": \"PM-BULK-001\",\n  \"items\": [\n    {\n      \"salesInvoice\": \"INV-ACM-10001\",\n      \"sku\": \"CAM-4K-PRO\",\n      \"productName\": \"4K Action Camera Pro\",\n      \"serialNumber\": \"PM-BULK-{{$timestamp}}\",\n      \"isDoa\": false,\n      \"isProductUnderWarranty\": true,\n      \"cloudStatus\": \"SYNCED\",\n      \"cloudDetails\": \"Cloud account removed.\",\n      \"productFault\": \"Bulk-created test fault.\",\n      \"customerTrackingNumber\": \"PM-BULK-TRACK-001\",\n      \"jobStatus\": \"CREATED\"\n    }\n  ]\n}"
             }
           }
         },
@@ -495,97 +1124,154 @@
           "name": "Serial Number Lookup",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/serial-number-lookup",
-            "body": { "mode": "raw", "raw": "{\n  \"serial_number\": \"SN-CAM4K-0001\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/serial-number-lookup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serialNumber\": \"SN-CAM4K-0001\"\n}"
+            }
           }
         },
         {
-          "name": "Find Repair Job",
+          "name": "Get Repair Job",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/find",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}"
           }
         },
         {
           "name": "Update Tracking Number",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/tracking-number",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"tracking_number\": \"PM-TRACK-UPDATED\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/tracking-number",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackingNumber\": \"PM-TRACK-UPDATED\"\n}"
+            }
           }
         },
         {
           "name": "Update SKU",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/sku",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"sku\": \"CAM-4K-PRO\",\n  \"product_name\": \"4K Action Camera Pro\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/sku",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"CAM-4K-PRO\"\n}"
+            }
           }
         },
         {
           "name": "Update Serial Number",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/serial-number",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"serial_number\": \"SN-CAM4K-0001\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/serial-number",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serialNumber\": \"SN-CAM4K-0001\"\n}"
+            }
           }
         },
         {
           "name": "Update Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/status",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"status\": \"IN_PROGRESS\",\n  \"description\": \"Updated from Postman.\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"note\": \"Updated from Postman.\"\n}"
+            }
           }
         },
         {
           "name": "Update Dispatch ID",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/dispatch-id",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}},\n  \"dispatch_id\": \"PM-DISP-001\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/dispatch-id",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dispatchId\": \"PM-DISP-001\"\n}"
+            }
           }
         },
         {
           "name": "Receive Job",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobs/receive",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/receive",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trackingNumber\": \"PM-TRACK-RECEIVED\"\n}"
+            }
           }
         }
       ]
     },
     {
-      "name": "Repair Job Costing",
+      "name": "Repair Job Costs",
       "item": [
         {
           "name": "List Repair Job Costs",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobcost/list",
-            "body": { "mode": "raw", "raw": "{\n  \"repair_job_id\": {{repairJobId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-job-costs?repairJobId={{repairJobId}}"
           }
         },
         {
-          "name": "Add Repair Job Cost",
+          "name": "Create Repair Job Cost",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobcost/add",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-job-costs",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"repair_job_id\": {{repairJobId}},\n  \"cost_type\": \"LABOR\",\n  \"description\": \"Postman labor test\",\n  \"quantity\": 1,\n  \"unit_cost\": 55,\n  \"is_billable\": true\n}"
+              "raw": "{\n  \"repairJobId\": {{repairJobId}},\n  \"costType\": \"LABOR\",\n  \"description\": \"Postman labor test\",\n  \"quantity\": 1,\n  \"unitCost\": 55,\n  \"isBillable\": true\n}"
             }
           }
         },
@@ -593,11 +1279,16 @@
           "name": "Update Repair Job Cost",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/repairjobcost/update",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-job-costs/{{repairJobCostId}}",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": {{repairCostId}},\n  \"cost_type\": \"PART\",\n  \"description\": \"Postman cost update\",\n  \"quantity\": 1,\n  \"unit_cost\": 72,\n  \"is_billable\": true\n}"
+              "raw": "{\n  \"costType\": \"PART\",\n  \"description\": \"Postman cost update\",\n  \"quantity\": 1,\n  \"unitCost\": 72,\n  \"isBillable\": true\n}"
             }
           }
         }
@@ -607,45 +1298,46 @@
       "name": "Chats",
       "item": [
         {
-          "name": "List Chat",
+          "name": "List Chats",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/chats/list",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/chats/repair-jobs/{{repairJobId}}?page=1&limit=100"
           }
         },
         {
-          "name": "Create Chat",
+          "name": "Create Chat Message",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/chats/create",
+            "url": "{{baseUrl}}/api/v1/chats/repair-jobs/{{repairJobId}}",
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "repair_job_id", "value": "{{repairJobId}}", "type": "text" },
-                { "key": "message", "value": "Postman chat message", "type": "text" },
-                { "key": "attachments", "type": "file", "src": "" }
+                {
+                  "key": "message",
+                  "value": "Postman chat message",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": ""
+                }
               ]
             }
           }
         },
         {
-          "name": "Mark Chat Read",
+          "name": "Mark Chats Read",
           "request": {
-            "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/chats/toggle-read",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/chats/repair-jobs/{{repairJobId}}/read"
           }
         },
         {
           "name": "Unread Chat Count",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/chats/unread-count",
-            "body": { "mode": "raw", "raw": "{\n  \"repair_job_id\": {{repairJobId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/chats/repair-jobs/{{repairJobId}}/unread-count"
           }
         }
       ]
@@ -656,23 +1348,28 @@
         {
           "name": "List Comments",
           "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/comments/list",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{repairJobId}}\n}" }
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/comments/repair-jobs/{{repairJobId}}?page=1&limit=100"
           }
         },
         {
           "name": "Create Comment",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/comments/create",
+            "url": "{{baseUrl}}/api/v1/comments/repair-jobs/{{repairJobId}}",
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "repair_job_id", "value": "{{repairJobId}}", "type": "text" },
-                { "key": "message", "value": "Postman repair comment", "type": "text" },
-                { "key": "attachments", "type": "file", "src": "" }
+                {
+                  "key": "message",
+                  "value": "Postman repair comment",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": ""
+                }
               ]
             }
           }
@@ -680,10 +1377,217 @@
         {
           "name": "Update Comment",
           "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/comments/{{commentId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Updated from Postman\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List My Notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const first = json?.data?.notifications?.[0];",
+                  "if (first?.id) pm.collectionVariables.set('notificationId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/notifications?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Create Manual Admin Notification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json?.data?.id) pm.collectionVariables.set('notificationId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/notifications/admin",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": {{organizationId}},\n  \"recipientType\": \"USER\",\n  \"recipientId\": {{userId}},\n  \"referenceType\": \"REPAIR_JOB\",\n  \"referenceId\": {{repairJobId}},\n  \"title\": \"Postman notification\",\n  \"message\": \"Notification created from Postman collection.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/notifications/{{notificationId}}/read",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isRead\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Unread Notification Count",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/notifications/unread-count"
+          }
+        },
+        {
+          "name": "Admin List Notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/notifications/admin?organizationId={{organizationId}}&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Get Notification Preferences",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/notifications/preferences"
+          }
+        },
+        {
+          "name": "Update Notification Preferences",
+          "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": "{{baseUrl}}/api/v1/comments/update",
-            "body": { "mode": "raw", "raw": "{\n  \"id\": {{commentId}},\n  \"message\": \"Updated from Postman\"\n}" }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/notifications/preferences",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailEnabled\": true,\n  \"inAppEnabled\": true,\n  \"digestEnabled\": false,\n  \"mutedEvents\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "Notification SSE Stream",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/notifications/stream?afterId=0",
+            "description": "Server-Sent Events connection. Send this request manually and cancel it when finished; it remains open by design."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "List Repair Job Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const first = Array.isArray(json?.data) ? json.data[0] : null;",
+                  "if (first?.id) pm.collectionVariables.set('documentId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents?repairJobId={{repairJobId}}"
+          }
+        },
+        {
+          "name": "Get Document",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents/{{documentId}}"
+          }
+        },
+        {
+          "name": "Download Document",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/documents/{{documentId}}/download"
+          }
+        },
+        {
+          "name": "Deactivate Document",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/v1/documents/{{documentId}}/deactivate"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repair Job Timeline",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-job-timeline/{{repairJobId}}/audit-logs"
+          }
+        },
+        {
+          "name": "Create Audit Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-job-timeline/audit-logs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repairJobId\": {{repairJobId}},\n  \"actionType\": \"CONTACT\",\n  \"description\": \"Postman audit log entry.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Tracking History",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-job-timeline/{{repairJobId}}/tracking"
           }
         }
       ]
@@ -693,38 +1597,1175 @@
       "item": [
         {
           "name": "Summary Report",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/summary?startDate=2026-01-01&endDate=2026-12-31&organizationId={{organizationId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/summary?startDate=2026-01-01&endDate=2026-12-31&organizationId={{organizationId}}"
+          }
         },
         {
           "name": "Backlog Report",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/backlog?organizationId={{organizationId}}&page=1&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/backlog?organizationId={{organizationId}}&page=1&limit=20"
+          }
         },
         {
           "name": "Throughput Report",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/throughput?startDate=2026-01-01&endDate=2026-12-31&period=month" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/throughput?startDate=2026-01-01&endDate=2026-12-31&period=month"
+          }
         },
         {
           "name": "Cost Report",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/costs?startDate=2026-01-01&endDate=2026-12-31&limit=10" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/costs?startDate=2026-01-01&endDate=2026-12-31&limit=10"
+          }
         },
         {
           "name": "Product Report",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/products?startDate=2026-01-01&endDate=2026-12-31&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/products?startDate=2026-01-01&endDate=2026-12-31&limit=20"
+          }
         },
         {
           "name": "Customer Report",
-          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/reports/customers?startDate=2026-01-01&endDate=2026-12-31&limit=20" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/customers?startDate=2026-01-01&endDate=2026-12-31&limit=20"
+          }
         },
         {
-          "name": "Summary Report POST",
+          "name": "Service Report PDF",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/repair-jobs/{{repairJobId}}/service-report.pdf"
+          }
+        },
+        {
+          "name": "Invoice PDF",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/reports/repair-jobs/{{repairJobId}}/invoice.pdf"
+          }
+        },
+        {
+          "name": "Email Invoice",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/reports/repair-jobs/{{repairJobId}}/invoice/email"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RMA Workflow",
+      "description": "Customer intake and internal repair lifecycle. Switch sessions with Login Customer/Login User where indicated.",
+      "item": [
+        {
+          "name": "List RMA Requests (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "const first = json?.data?.requests?.[0];",
+                  "if (first?.id) pm.collectionVariables.set('rmaRequestId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-jobs/requests?organizationId={{organizationId}}&page=1&limit=25"
+          }
+        },
+        {
+          "name": "Submit RMA Request (Customer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('rmaRequestId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/repair-jobs/requests",
+            "description": "Run Login Customer before this request. Attach optional evidence by enabling the evidence field.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "sku",
+                  "value": "PM-RMA-SKU",
+                  "type": "text"
+                },
+                {
+                  "key": "productName",
+                  "value": "Postman Test Device",
+                  "type": "text"
+                },
+                {
+                  "key": "serialNumber",
+                  "value": "PM-RMA-{{$timestamp}}",
+                  "type": "text"
+                },
+                {
+                  "key": "productFault",
+                  "value": "Device does not power on",
+                  "type": "text"
+                },
+                {
+                  "key": "salesInvoice",
+                  "value": "PM-INVOICE-001",
+                  "type": "text"
+                },
+                {
+                  "key": "customerTrackingNumber",
+                  "value": "PM-INBOUND-001",
+                  "type": "text"
+                },
+                {
+                  "key": "requestedResolution",
+                  "value": "REPAIR",
+                  "type": "text"
+                },
+                {
+                  "key": "evidence",
+                  "type": "file",
+                  "src": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Review RMA Request (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.request?.id) pm.collectionVariables.set('rmaRequestId', json.data.request.id);",
+                  "if (json?.data?.repairJob?.id) pm.collectionVariables.set('repairJobId', json.data.repairJob.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/requests/{{rmaRequestId}}/review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"ACCEPTED\",\n  \"note\": \"Accepted from Postman after intake review\"\n}"
+            },
+            "description": "Run Login User before this request."
+          }
+        },
+        {
+          "name": "Assign Technician",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/assignment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"technicianId\": \"{{technicianId}}\",\n  \"priority\": \"HIGH\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Transition Repair Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"{{nextRepairStatus}}\",\n  \"note\": \"Repair lifecycle transition from Postman\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Inspection Work Log",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/work-logs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"INSPECTION\",\n  \"summary\": \"Initial inspection completed\",\n  \"details\": \"Housing and connectors inspected.\",\n  \"durationMin\": 20,\n  \"passed\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Create and Send Estimate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('estimateId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/estimates",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"send\": true,\n  \"lines\": [\n    {\n      \"description\": \"Diagnostic labour\",\n      \"quantity\": 1,\n      \"unitPrice\": 75\n    },\n    {\n      \"description\": \"Replacement component\",\n      \"quantity\": 1,\n      \"unitPrice\": 45.5\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve Estimate (Customer)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repair-jobs/estimates/{{estimateId}}/decision",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVED\",\n  \"note\": \"Approved from the customer Postman session\"\n}"
+            },
+            "description": "Run Login Customer before this request."
+          }
+        },
+        {
+          "name": "Get Repair Workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "const first = json?.data?.estimates?.[0];",
+                  "if (first?.id) pm.collectionVariables.set('estimateId', first.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/workflow"
+          }
+        },
+        {
+          "name": "Get Device Credential (Audited)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/repair-jobs/{{repairJobId}}/device-credential?reason={{deviceCredentialReason}}",
+            "description": "Returns Cache-Control: no-store and creates an audit entry for this access."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "List Inventory",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/inventory?organizationId={{organizationId}}&page=1&limit=25&search="
+          }
+        },
+        {
+          "name": "Create Inventory Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('inventoryItemId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventory",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"sku\": \"PM-PART-{{$timestamp}}\",\n  \"name\": \"Postman Replacement Part\",\n  \"quantityOnHand\": 10,\n  \"reorderPoint\": 2,\n  \"unitCost\": 18.5\n}"
+            }
+          }
+        },
+        {
+          "name": "Receive Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.movement?.id) pm.collectionVariables.set('inventoryMovementId', json.data.movement.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventory/{{inventoryItemId}}/movements",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"RECEIVE\",\n  \"quantity\": 5,\n  \"reason\": \"Stock received through Postman\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reserve Inventory for Repair",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.movement?.id) pm.collectionVariables.set('inventoryMovementId', json.data.movement.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventory/{{inventoryItemId}}/movements",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"RESERVE\",\n  \"quantity\": 1,\n  \"repairJobId\": \"{{repairJobId}}\",\n  \"reason\": \"Reserved for repair job\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipments",
+      "item": [
+        {
+          "name": "Create Shipment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('shipmentId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/shipments/repair-jobs/{{repairJobId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direction\": \"OUTBOUND\",\n  \"carrier\": \"NZ Post\",\n  \"service\": \"Courier\",\n  \"trackingNumber\": \"PM-TRACK-{{$timestamp}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Shipment Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/shipments/{{shipmentId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_TRANSIT\",\n  \"description\": \"Collected by carrier\",\n  \"location\": \"Auckland\",\n  \"occurredAt\": \"{{$isoTimestamp}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "item": [
+        {
+          "name": "Create and Issue Invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('invoiceId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/billing/repair-jobs/{{repairJobId}}/invoices",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"issue\": true\n}"
+            },
+            "description": "The repair job must have at least one billable costing row and no other active invoice."
+          }
+        },
+        {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}"
+          }
+        },
+        {
+          "name": "Record Invoice Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.payment?.id) pm.collectionVariables.set('paymentId', json.data.payment.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}/payments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 25,\n  \"method\": \"BANK_TRANSFER\",\n  \"externalRef\": \"PM-PAY-{{$timestamp}}\",\n  \"paidAt\": \"{{$isoTimestamp}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Void Invoice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/billing/invoices/{{invoiceId}}/void",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Postman void test\"\n}"
+            },
+            "description": "Only unpaid invoices can be voided."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organization Settings",
+      "item": [
+        {
+          "name": "Get Organization Settings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/organization-settings/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Update Organization Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/organization-settings/{{organizationId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timezone\": \"Pacific/Auckland\",\n  \"currency\": \"NZD\",\n  \"taxRate\": 0.15,\n  \"defaultSlaHours\": 120,\n  \"businessHours\": {\n    \"monday\": {\n      \"start\": \"08:30\",\n      \"end\": \"17:00\"\n    },\n    \"friday\": {\n      \"start\": \"08:30\",\n      \"end\": \"16:30\"\n    }\n  },\n  \"workflowConfiguration\": {\n    \"requireEstimateApproval\": true,\n    \"requireQa\": true\n  },\n  \"branding\": {\n    \"displayName\": \"RMA Service\"\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Integrations",
+      "item": [
+        {
+          "name": "Create API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('apiKeyId', json.data.id);",
+                  "if (json?.data?.key) pm.collectionVariables.set('apiKey', json.data.key);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/integrations/api-keys",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Postman Integration\",\n  \"scopes\": [\n    \"repair-jobs:read\",\n    \"events:read\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "API Key Ping",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/integrations/ping"
+          }
+        },
+        {
+          "name": "List Integrations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/integrations/organizations/{{organizationId}}"
+          }
+        },
+        {
+          "name": "Create Signed Webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('webhookId', json.data.id);",
+                  "if (json?.data?.secret) pm.collectionVariables.set('webhookSecret', json.data.secret);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/integrations/webhooks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"url\": \"{{webhookUrl}}\",\n  \"events\": [\n    \"repair_job.status_changed\",\n    \"repair_job.assigned\",\n    \"invoice.issued\",\n    \"payment.succeeded\",\n    \"shipment.status_changed\"\n  ]\n}"
+            },
+            "description": "The signing secret is returned once. Production webhook URLs must use HTTPS and cannot target private networks."
+          }
+        },
+        {
+          "name": "Revoke API Key",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/integrations/api-keys/{{apiKeyId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Privacy",
+      "item": [
+        {
+          "name": "Export Customer Data",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/privacy/export?customerId={{customerId}}&page=1&limit=25"
+          }
+        },
+        {
+          "name": "Submit Privacy Export Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('privacyRequestId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/privacy/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"type\": \"EXPORT\",\n  \"reason\": \"Customer requested a portable copy of their data\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Privacy Erasure Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.id) pm.collectionVariables.set('privacyRequestId', json.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/privacy/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"type\": \"ERASURE\",\n  \"reason\": \"Customer requested account erasure review\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Privacy Requests",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/privacy/requests?organizationId={{organizationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Multi-Factor Authentication",
+      "description": "Use an authenticator application with the setup URL. Set mfaCode to the current TOTP before enabling/disabling MFA.",
+      "item": [
+        {
+          "name": "Start MFA Setup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let json;",
+                  "try { json = pm.response.json(); } catch { json = null; }",
+                  "if (json?.data?.secret) pm.collectionVariables.set('mfaSecret', json.data.secret);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/mfa/setup",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "The secret is sensitive and is returned only to enroll an authenticator."
+          }
+        },
+        {
+          "name": "Enable MFA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/mfa/enable",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{mfaCode}}\"\n}"
+            },
+            "description": "Save the returned recovery codes securely; they are shown once."
+          }
+        },
+        {
+          "name": "Disable MFA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/mfa/disable",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{mfaCode}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Legacy Compatibility (Deprecated)",
+      "description": "Temporary examples for existing clients only. These routes return Deprecation, Sunset, Link, and Warning headers and are scheduled for removal. Use the canonical requests in the primary folders for new development; see docs/api-migration.md.",
+      "item": [
+        {
+          "name": "[Deprecated] List Users",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/users/list_user",
+            "description": "Use GET /api/v1/users."
+          }
+        },
+        {
+          "name": "[Deprecated] Find Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/customers/find",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{customerId}}\n}"
+            },
+            "description": "Use GET /api/v1/customers/:id."
+          }
+        },
+        {
+          "name": "[Deprecated] Misspelled Product Prefix",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/proudcts?page=1&limit=20",
+            "description": "Use GET /api/v1/products."
+          }
+        },
+        {
+          "name": "[Deprecated] Serial Number Prefix",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/serialnumbers?page=1&limit=20",
+            "description": "Use GET /api/v1/serial-numbers."
+          }
+        },
+        {
+          "name": "[Deprecated] List Repair Jobs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repairjobs/list_repairjob",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field\": \"IN_PROGRESS\",\n  \"page\": 1,\n  \"limit\": 20\n}"
+            },
+            "description": "Use GET /api/v1/repair-jobs with status, page, and limit query parameters."
+          }
+        },
+        {
+          "name": "[Deprecated] List Repair Job Costs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repairjobcost/list",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repair_job_id\": {{repairJobId}}\n}"
+            },
+            "description": "Use GET /api/v1/repair-job-costs?repairJobId=:repairJobId."
+          }
+        },
+        {
+          "name": "[Deprecated] List Chats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chats/list",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{repairJobId}}\n}"
+            },
+            "description": "Use GET /api/v1/chats/repair-jobs/:repairJobId."
+          }
+        },
+        {
+          "name": "[Deprecated] List Comments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/comments/list",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{repairJobId}}\n}"
+            },
+            "description": "Use GET /api/v1/comments/repair-jobs/:repairJobId."
+          }
+        },
+        {
+          "name": "[Deprecated] Mark Notification Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/notifications/read",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{notificationId}},\n  \"isRead\": true\n}"
+            },
+            "description": "Use PATCH /api/v1/notifications/:id/read."
+          }
+        },
+        {
+          "name": "[Deprecated] List Documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/documents/list",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repairJobId\": {{repairJobId}}\n}"
+            },
+            "description": "Use GET /api/v1/documents?repairJobId=:repairJobId."
+          }
+        },
+        {
+          "name": "[Deprecated] Revoke Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/sessions/revoke",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": {{sessionId}}\n}"
+            },
+            "description": "Use DELETE /api/v1/sessions/:id."
+          }
+        },
+        {
+          "name": "[Deprecated] List Repair Job Audit Logs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/repairjob-timeline/audit-logs/list",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"repairJobId\": {{repairJobId}}\n}"
+            },
+            "description": "Use GET /api/v1/repair-job-timeline/:repairJobId/audit-logs."
+          }
+        },
+        {
+          "name": "[Deprecated] Summary Report POST",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/api/v1/reports/summary",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"startDate\": \"2026-01-01\",\n  \"endDate\": \"2026-12-31\",\n  \"organizationId\": {{organizationId}}\n}"
-            }
+            },
+            "description": "Use GET /api/v1/reports/summary with query parameters."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Platform Operations",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/health/live"
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/health/ready"
+          }
+        },
+        {
+          "name": "Metrics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{metricsToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/metrics"
+          }
+        },
+        {
+          "name": "Process Outbox Batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/operations/outbox/process",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 20\n}"
+            },
+            "description": "SUPER_ADMIN only. Normally the background worker processes these events automatically."
+          }
+        },
+        {
+          "name": "Process SLA Breaches",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/operations/sla/process",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"limit\": 100\n}"
+            },
+            "description": "SUPER_ADMIN only. Normally the SLA worker performs this scan automatically."
+          }
+        }
+      ]
+    },
+    {
+      "name": "API Documentation",
+      "item": [
+        {
+          "name": "OpenAPI JSON",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/api-docs/openapi.json"
+          }
+        },
+        {
+          "name": "API Documentation Index",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/api-docs"
           }
         }
       ]
